@@ -16,7 +16,7 @@ public class LexicalException extends PLCException {
 	public LexicalException(Throwable cause) {
 		super(cause);
 	}
-	
+
 	public LexicalException(String error_message, int line, int column) {
 		super(line + ":" + column + "  " + error_message);
 	}
