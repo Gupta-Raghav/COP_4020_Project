@@ -1,24 +1,22 @@
 package edu.ufl.cise.plc;
 
-import edu.ufl.cise.plc.IToken;
-
 public class Token implements IToken {
 
-    private Kind tokenType;
+    private Kind Type;
     private String sourceCode;
-    private SourceLocation position;
+    private SourceLocation pos;
     private int length;
 
-    public TokenClass(Kind tokenType, String sourceCode, SourceLocation position, int length) {
-        this.tokenType = tokenType;
+    public Token(Kind Type, String sourceCode, SourceLocation pos, int length) {
+        this.Type = Type;
         this.sourceCode = sourceCode;
-        this.position = position;
+        this.pos = pos;
         this.length = length;
     }
 
     @Override
     public Kind getKind() {
-        return tokenType;
+        return Type;
     }
 
     @Override
@@ -28,7 +26,7 @@ public class Token implements IToken {
 
     @Override
     public SourceLocation getSourceLocation() {
-        return position;
+        return pos;
     }
 
     @Override
@@ -46,42 +44,41 @@ public class Token implements IToken {
         return Boolean.valueOf(sourceCode);
     }
 
-    // Need to change this so that it removes the "s and the escape sequences
     @Override
     public String getStringValue() {
 
-        String stringValue = "";
+        String resString = "";
 
         for (int i = 1; i < sourceCode.length() - 1; i++) {
 
             if (sourceCode.charAt(i) != '\\') {
-                stringValue += sourceCode.charAt(i);
+                resString += sourceCode.charAt(i);
             } else {
                 switch (sourceCode.charAt(i + 1)) {
 
-                    case 'b' -> {
-                        stringValue += '\b';
-                    }
-                    case 't' -> {
-                        stringValue += '\t';
-                    }
-                    case 'n' -> {
-                        stringValue += '\n';
+                    case 'r' -> {
+                        resString += '\r';
                     }
                     case 'f' -> {
-                        stringValue += '\f';
+                        resString += '\f';
                     }
-                    case 'r' -> {
-                        stringValue += '\r';
+                    case 'n' -> {
+                        resString += '\n';
+                    }
+                    case 't' -> {
+                        resString += '\t';
+                    }
+                    case 'b' -> {
+                        resString += '\b';
                     }
                     case '"' -> {
-                        stringValue += '\"';
+                        resString += '\"';
                     }
                     case '\'' -> {
-                        stringValue += '\'';
+                        resString += '\'';
                     }
                     case '\\' -> {
-                        stringValue += '\\';
+                        resString += '\\';
                     }
 
                 }
@@ -90,7 +87,7 @@ public class Token implements IToken {
 
         }
 
-        return stringValue;
+        return resString;
     }
 
 }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import edu.ufl.cise.plc.CompilerComponentFactory;
 import edu.ufl.cise.plc.ILexer;
 import edu.ufl.cise.plc.IToken;
+import edu.ufl.cise.plc.LexicalException;
 import edu.ufl.cise.plc.IToken.Kind;
 
 public class LexerTests {
