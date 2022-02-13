@@ -15,4 +15,8 @@ public class CompilerComponentFactory {
 		// lexer");
 	}
 
+	public static IParser getParser(String input) {
+		return new Parser(input);
+	}
+
 }
