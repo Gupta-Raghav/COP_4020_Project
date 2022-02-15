@@ -50,19 +50,19 @@ class Assignment2StarterTests {
 		}
 	}
 
-	// @DisplayName("test0")
-	// @Test
-	// public void test0(TestInfo testInfo) throws Exception {
-	// String input = """
-	// true
-	// """;
-	// show("-------------");
-	// show(input);
-	// Expr ast = (Expr) getAST(input);
-	// show(ast);
-	// assertThat("", ast, instanceOf(BooleanLitExpr.class));
-	// assertTrue(((BooleanLitExpr) ast).getValue());
-	// }
+	@DisplayName("test0")
+	@Test
+	public void test0(TestInfo testInfo) throws Exception {
+		String input = """
+				true
+				""";
+		show("-------------");
+		show(input);
+		Expr ast = (Expr) getAST(input);
+		show(ast);
+		assertThat("", ast, instanceOf(BooleanLitExpr.class));
+		assertTrue(((BooleanLitExpr) ast).getValue());
+	}
 
 	@DisplayName("test1")
 	@Test
@@ -140,25 +140,25 @@ class Assignment2StarterTests {
 		assertEquals(30, ((IntLitExpr) var1).getValue());
 	}
 
-	// @DisplayName("test6")
-	// @Test
-	// public void test6(TestInfo testInfo) throws Exception {
-	// String input = """
-	// a + true
-	// """;
-	// show("-------------");
-	// show(input);
-	// Expr ast = (Expr) getAST(input);
-	// show(ast);
-	// assertThat("", ast, instanceOf(BinaryExpr.class));
-	// assertEquals(PLUS, ((BinaryExpr) ast).getOp().getKind());
-	// Expr var2 = ((BinaryExpr) ast).getLeft();
-	// assertThat("", var2, instanceOf(IdentExpr.class));
-	// assertEquals("a", var2.getText());
-	// Expr var3 = ((BinaryExpr) ast).getRight();
-	// assertThat("", var3, instanceOf(BooleanLitExpr.class));
-	// assertTrue(((BooleanLitExpr) var3).getValue());
-	// }
+	@DisplayName("test6")
+	@Test
+	public void test6(TestInfo testInfo) throws Exception {
+		String input = """
+				a + true
+				""";
+		show("-------------");
+		show(input);
+		Expr ast = (Expr) getAST(input);
+		show(ast);
+		assertThat("", ast, instanceOf(BinaryExpr.class));
+		assertEquals(PLUS, ((BinaryExpr) ast).getOp().getKind());
+		Expr var2 = ((BinaryExpr) ast).getLeft();
+		assertThat("", var2, instanceOf(IdentExpr.class));
+		assertEquals("a", var2.getText());
+		Expr var3 = ((BinaryExpr) ast).getRight();
+		assertThat("", var3, instanceOf(BooleanLitExpr.class));
+		assertTrue(((BooleanLitExpr) var3).getValue());
+	}
 
 	@DisplayName("test7")
 	@Test
