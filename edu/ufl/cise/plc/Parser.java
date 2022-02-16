@@ -1,10 +1,15 @@
 package edu.ufl.cise.plc;
 
 import edu.ufl.cise.plc.ast.ASTNode;
+import edu.ufl.cise.plc.ast.BooleanLitExpr;
+import edu.ufl.cise.plc.ast.Expr;
+import edu.ufl.cise.plc.ast.FloatLitExpr;
 import edu.ufl.cise.plc.ast.IdentExpr;
+import edu.ufl.cise.plc.ast.IntLitExpr;
 import edu.ufl.cise.plc.ast.PixelSelector;
+import edu.ufl.cise.plc.ast.StringLitExpr;
 
-import java.util.HashSet;
+import java.util.*;
 
 import static edu.ufl.cise.plc.CompilerComponentFactory.getLexer;
 
@@ -12,6 +17,10 @@ public class Parser implements IParser {
     ILexer lexer;
     Token currToken;
     Token nextToken;
+
+    private final ArrayList<Token> tokens;
+    private int ind = 0;
+
     HashSet<IToken.Kind> ExprSet;
     HashSet<IToken.Kind> ConditionalExprSet;
     HashSet<IToken.Kind> LogicalOrExprSet;
@@ -24,15 +33,43 @@ public class Parser implements IParser {
     HashSet<IToken.Kind> PrimaryExprSet;
     HashSet<IToken.Kind> PixelSelectorSet;
 
-    void match(IToken.Kind kind) throws PLCException {
+    boolean match(IToken.Kind kind) throws PLCException {
+        currToken = tokens.get(ind);
         if (kind == currToken.getKind()) {
-            currToken = (Token) lexer.next();
+            ind++;
+            return true;
         } else {
-            throw new SyntaxException("expected currToken to match kind");
+            ind++;
+            return false;
+            // throw new SyntaxException("expected currToken to match kind");
         }
+
     }
 
+    // private boolean peek(Object... patterns) {
+    // for (int i = 0; i < patterns.length; i++) {
+    // if (!currToken.has(i)) {
+    // return false;
+    // } else if (patterns[i] instanceof Token.Type) {
+    // if (patterns[i] != currToken.get(i).getType()) {
+    // return false;
+    // }
+    // } else if (patterns[i] instanceof String) {
+    // if (!patterns[i].equals(currToken.get(i).getLiteral())) {
+    // return false;
+    // }
+    // } else {
+    // throw new AssertionError("Invalid pattern object: "
+    // + patterns[i].getClass());
+    // }
+    // }
+    // return true;
+    // }
+
+    // Expr :: = CondExpr | LogicExpr
     void Expr() throws PLCException {
+        currToken = tokens.get(ind);
+        Expr e = null;
         if (ConditionalExprSet.contains(currToken.getKind())) {
             ConditionalExpr();
         } else if (LogicalOrExprSet.contains(currToken.getKind())) {
@@ -53,7 +90,7 @@ public class Parser implements IParser {
             Expr();
             match(IToken.Kind.KW_FI);
         } else {
-            throw new SyntaxException("expected kw if in ConditionalExpr");
+            throw new SyntaxException("expected if in ConditionalExpr");
         }
     }
 
@@ -163,14 +200,31 @@ public class Parser implements IParser {
         }
     }
 
-    void PrimaryExpr() throws PLCException {
+    public Expr PrimaryExpr() throws PLCException {
+        currToken = tokens.get(ind);
+        Expr e = null;
         if (PrimaryExprSet.contains(currToken.getKind())) {
             switch (currToken.getKind()) {
-                case BOOLEAN_LIT -> match(IToken.Kind.BOOLEAN_LIT);
-                case STRING_LIT -> match(IToken.Kind.STRING_LIT);
-                case INT_LIT -> match(IToken.Kind.INT_LIT);
-                case FLOAT_LIT -> match(IToken.Kind.FLOAT_LIT);
-                case IDENT -> match(IToken.Kind.IDENT);
+                case BOOLEAN_LIT -> {
+                    e = new BooleanLitExpr(currToken);
+                    match(IToken.Kind.BOOLEAN_LIT);
+                }
+                case STRING_LIT -> {
+                    e = new StringLitExpr(currToken);
+                    match(IToken.Kind.STRING_LIT);
+                }
+                case INT_LIT -> {
+                    e = new IntLitExpr(currToken);
+                    match(IToken.Kind.INT_LIT);
+                }
+                case FLOAT_LIT -> {
+                    e = new FloatLitExpr(currToken);
+                    match(IToken.Kind.FLOAT_LIT);
+                }
+                case IDENT -> {
+                    e = new IdentExpr(currToken);
+                    match(IToken.Kind.IDENT);
+                }
                 case LPAREN -> {
                     match(IToken.Kind.LPAREN);
                     Expr();
@@ -181,6 +235,7 @@ public class Parser implements IParser {
         } else {
             throw new SyntaxException("expected primaryexpr in PrimaryExpr");
         }
+        return e;
     }
 
     void PixelSelector() throws PLCException {
@@ -202,8 +257,10 @@ public class Parser implements IParser {
         // return new IdentExpr(new Token(0, 0, "", IToken.Kind.IDENT, 0));
     }
 
-    public Parser(String input) {
-        lexer = getLexer(input);
+    public Parser(ArrayList<Token> tokens) {
+        // lexer = getLexer(input);
+        // predict sets for the given CFG
+        this.tokens = tokens;
         PixelSelectorSet.add(IToken.Kind.LSQUARE);
         ConditionalExprSet.add(IToken.Kind.KW_IF);
         PrimaryExprSet.add(IToken.Kind.BOOLEAN_LIT);
