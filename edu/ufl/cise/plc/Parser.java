@@ -259,6 +259,8 @@ public class Parser implements IParser {
 
     public Parser(String input) {
         lexer = getLexer(input);
+
+        // predict sets for all the functions
         PixelSelectorSet.add(IToken.Kind.LSQUARE);
         ConditionalExprSet.add(IToken.Kind.KW_IF);
         PrimaryExprSet.add(IToken.Kind.BOOLEAN_LIT);
