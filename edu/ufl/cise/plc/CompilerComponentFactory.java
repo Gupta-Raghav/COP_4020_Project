@@ -15,8 +15,7 @@ public class CompilerComponentFactory {
 		// lexer");
 	}
 
-	public static IParser getParser(String input) {
-
+	public static IParser getParser(String input) throws PLCException {
 		return new Parser(input);
 	}
 
