@@ -1,6 +1,7 @@
 package edu.ufl.cise.plc;
 
 import edu.ufl.cise.plc.ast.ASTNode;
+import edu.ufl.cise.plc.ast.BinaryExpr;
 import edu.ufl.cise.plc.ast.BooleanLitExpr;
 import edu.ufl.cise.plc.ast.Expr;
 import edu.ufl.cise.plc.ast.FloatLitExpr;
@@ -67,7 +68,7 @@ public class Parser implements IParser {
     // }
 
     // Expr :: = CondExpr | LogicExpr
-    void Expr() throws PLCException {
+    public Expr Expr() throws PLCException {
         currToken = tokens.get(ind);
         Expr e = null;
         if (ConditionalExprSet.contains(currToken.getKind())) {
@@ -77,57 +78,77 @@ public class Parser implements IParser {
         } else {
             throw new SyntaxException("expected conditional or logical token in Expr");
         }
+        return e;
     }
 
-    void ConditionalExpr() throws PLCException {
+    public Expr ConditionalExpr() throws PLCException {
+        currToken = tokens.get(ind);
+        Expr e = null;
         if (currToken.getKind() == IToken.Kind.KW_IF) {
             match(IToken.Kind.KW_IF);
             match(IToken.Kind.LPAREN);
-            Expr();
+            e = Expr();
             match(IToken.Kind.RPAREN);
-            Expr();
+            e = Expr();
             match(IToken.Kind.KW_ELSE);
-            Expr();
+            e = Expr();
             match(IToken.Kind.KW_FI);
         } else {
             throw new SyntaxException("expected if in ConditionalExpr");
         }
+        return e;
     }
 
-    void LogicalOrExpr() throws PLCException {
+    public Expr LogicalOrExpr() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr left = null;
+        Expr right = null;
+        left = LogicalAndExpr();
         if (LogicalOrExprSet.contains(currToken.getKind())) {
-            LogicalAndExpr();
             while (currToken.getKind() == IToken.Kind.OR) {
+                IToken op = tokens.get(ind);
                 match(IToken.Kind.OR);
-                LogicalAndExpr();
-            }
-
-        } else {
-            throw new SyntaxException("expected logical and token in LogicalOrExpr");
-        }
-    }
-
-    void LogicalAndExpr() throws PLCException {
-        if (LogicalAndExprSet.contains(currToken.getKind())) {
-            ComparisonExpr();
-            while (IToken.Kind.AND == currToken.getKind()) { // x AND y, currToken.getKind returns AND,
-                match(IToken.Kind.AND);
-                ComparisonExpr();
+                right = LogicalAndExpr();
+                left = new BinaryExpr(firstToken, left, op, right);
             }
         } else {
             throw new SyntaxException("expected comparisonexpr in LogicalAndExpr");
         }
+        return left;
     }
 
-    void ComparisonExpr() throws PLCException {
-        AdditiveExpr();
-        while ((currToken.getKind() == IToken.Kind.LARROW) || (currToken.getKind() == IToken.Kind.RARROW) ||
+    public Expr LogicalAndExpr() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr left = null;
+        Expr right = null;
+        left = ComparisonExpr();
+        if (LogicalAndExprSet.contains(currToken.getKind())) {
+            ComparisonExpr();
+            while (IToken.Kind.AND == currToken.getKind()) { // x AND y, currToken.getKind returns AND,
+                IToken op = tokens.get(ind);
+                match(IToken.Kind.AND);
+                right = ComparisonExpr();
+                left = new BinaryExpr(firstToken, left, op, right);
+            }
+        } else {
+            throw new SyntaxException("expected comparisonexpr in LogicalAndExpr");
+        }
+        return left;
+    }
+
+    public Expr ComparisonExpr() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr left = null;
+        Expr right = null;
+        left = AdditiveExpr();
+        while ((currToken.getKind() == IToken.Kind.LT) || (currToken.getKind() == IToken.Kind.GT) ||
                 (currToken.getKind() == IToken.Kind.EQUALS) || (currToken.getKind() == IToken.Kind.NOT_EQUALS) ||
                 (currToken.getKind() == IToken.Kind.LE) || (currToken.getKind() == IToken.Kind.GE)) {
-            if ((currToken.getKind() == IToken.Kind.LARROW)) {
-                match(IToken.Kind.LARROW);
-            } else if ((currToken.getKind() == IToken.Kind.RARROW)) {
-                match(IToken.Kind.RARROW);
+            IToken op = tokens.get(ind);
+            if ((currToken.getKind() == IToken.Kind.LT)) {
+                match(IToken.Kind.LT);
+            } else if ((currToken.getKind() == IToken.Kind.GT)) {
+                match(IToken.Kind.GT);
             } else if ((currToken.getKind() == IToken.Kind.EQUALS)) {
                 match(IToken.Kind.EQUALS);
             } else if ((currToken.getKind() == IToken.Kind.NOT_EQUALS)) {
@@ -137,15 +158,22 @@ public class Parser implements IParser {
             } else if ((currToken.getKind() == IToken.Kind.GE)) {
                 match(IToken.Kind.GE);
             } else {
-                throw new SyntaxException("expected comparison operator in ComparisonExpr");
+                throw new SyntaxException("expected addition operator in AdditiveExpr");
             }
-            MultiplicativeExpr();
+            right = AdditiveExpr();
+            left = new BinaryExpr(firstToken, left, op, right);
+
         }
+        return left;
     }
 
-    void AdditiveExpr() throws PLCException {
-        MultiplicativeExpr();
+    public Expr AdditiveExpr() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr left = null;
+        Expr right = null;
+        left = MultiplicativeExpr();
         while (IToken.Kind.PLUS == currToken.getKind() || IToken.Kind.MINUS == currToken.getKind()) {
+            IToken op = tokens.get(ind);
             if (currToken.getKind() == IToken.Kind.PLUS) {
                 match(IToken.Kind.PLUS);
             } else if (currToken.getKind() == IToken.Kind.MINUS) {
@@ -153,15 +181,21 @@ public class Parser implements IParser {
             } else {
                 throw new SyntaxException("expected addition operator in AdditiveExpr");
             }
-            MultiplicativeExpr();
+            right = MultiplicativeExpr();
+            left = new BinaryExpr(firstToken, left, op, right);
         }
+        return left;
 
     }
 
-    void MultiplicativeExpr() throws PLCException {
-        UnaryExpr();
+    public Expr MultiplicativeExpr() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr left = null;
+        Expr right = null;
+        left = UnaryExpr();
         while (IToken.Kind.TIMES == currToken.getKind() || IToken.Kind.DIV == currToken.getKind()
                 || IToken.Kind.MOD == currToken.getKind()) {
+            IToken op = tokens.get(ind);
             if (currToken.getKind() == IToken.Kind.TIMES) {
                 match(IToken.Kind.TIMES);
             } else if (currToken.getKind() == IToken.Kind.DIV) {
@@ -171,10 +205,15 @@ public class Parser implements IParser {
             } else {
                 throw new SyntaxException("expected multiplication operator in MultiplicativeExpr");
             }
+            right = UnaryExpr();
+            left = new BinaryExpr(firstToken, left, op, right);
         }
+        return left;
     }
 
-    void UnaryExpr() throws PLCException {
+    public Expr UnaryExpr() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr e = null;
         if ((currToken.getKind() == IToken.Kind.BANG) || (currToken.getKind() == IToken.Kind.MINUS) ||
                 (currToken.getKind() == IToken.Kind.COLOR_OP) || (currToken.getKind() == IToken.Kind.IMAGE_OP)) {
             if (currToken.getKind() == IToken.Kind.BANG) {
@@ -188,16 +227,20 @@ public class Parser implements IParser {
             } else {
                 throw new SyntaxException("expected unary operator in UnaryExpr");
             }
-            UnaryExpr();
+            e = UnaryExpr();
         } else
-            UnaryExprPostfix();
+            e = UnaryExprPostfix();
+        return e;
     }
 
-    void UnaryExprPostfix() throws PLCException {
+    public Expr UnaryExprPostfix() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr e = null;
         PrimaryExpr();
         if (PixelSelectorSet.contains(currToken.getKind())) {
             PixelSelector();
         }
+        return e;
     }
 
     public Expr PrimaryExpr() throws PLCException {
@@ -227,7 +270,7 @@ public class Parser implements IParser {
                 }
                 case LPAREN -> {
                     match(IToken.Kind.LPAREN);
-                    Expr();
+                    e = Expr();
                     match(IToken.Kind.LPAREN);
                 }
                 default -> throw new SyntaxException("expected PrimaryExpr in PrimaryExpr");
@@ -238,15 +281,18 @@ public class Parser implements IParser {
         return e;
     }
 
-    void PixelSelector() throws PLCException {
+    public Expr PixelSelector() throws PLCException {
+        IToken firstToken = tokens.get(ind);
+        Expr e = null;
         if (currToken.getKind() == IToken.Kind.LSQUARE) {
             match(IToken.Kind.LSQUARE);
-            Expr();
+            e = Expr();
             match(IToken.Kind.COMMA);
-            Expr();
+            e = Expr();
             match(IToken.Kind.RPAREN);
         } else
             throw new SyntaxException("Expected LSQUARE in PixelSelector");
+        return e;
     }
 
     public ASTNode parse() throws PLCException {
@@ -257,10 +303,10 @@ public class Parser implements IParser {
         // return new IdentExpr(new Token(0, 0, "", IToken.Kind.IDENT, 0));
     }
 
-    public Parser(ArrayList<Token> tokens) {
-        // lexer = getLexer(input);
+    public Parser(String input) {
+        ArrayList<Token> tokens;
+        lexer = getLexer(input);
         // predict sets for the given CFG
-        this.tokens = tokens;
         PixelSelectorSet.add(IToken.Kind.LSQUARE);
         ConditionalExprSet.add(IToken.Kind.KW_IF);
         PrimaryExprSet.add(IToken.Kind.BOOLEAN_LIT);
