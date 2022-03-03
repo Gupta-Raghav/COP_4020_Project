@@ -1,8 +1,12 @@
 package edu.ufl.cise.plc;
 
 import edu.ufl.cise.plc.ast.*;
+import edu.ufl.cise.plc.ast.Dimension;
 
+import java.awt.*;
 import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
 
 import static edu.ufl.cise.plc.CompilerComponentFactory.getLexer;
 
@@ -21,6 +25,11 @@ public class Parser implements IParser {
     HashSet<IToken.Kind> UnaryExprPostfixSet = new HashSet();
     HashSet<IToken.Kind> PrimaryExprSet = new HashSet();
     HashSet<IToken.Kind> PixelSelectorSet = new HashSet();
+    HashSet<IToken.Kind> ProgramSet = new HashSet();
+    HashSet<IToken.Kind> NameDefSet = new HashSet();
+    HashSet<IToken.Kind> DeclarationSet = new HashSet();
+    HashSet<IToken.Kind> DimensionSet = new HashSet();
+    HashSet<IToken.Kind> StatementSet = new HashSet();
 
     void consume() throws PLCException {
         currToken = (Token) lexer.next();
@@ -32,6 +41,84 @@ public class Parser implements IParser {
         } else {
             throw new SyntaxException("expected currToken " + currToken.getKind() + " to match " + kind);
         }
+    }
+
+    Program ProgramFunc() throws PLCException {
+        List<NameDef> params = new ArrayList<NameDef>();
+        List<ASTNode> decsAndStatements = new ArrayList<ASTNode>();
+        Types.Type type = Types.Type.VOID;
+        IToken firstToken = currToken;
+        String name;
+        if (currToken.getKind() == IToken.Kind.TYPE || currToken.getKind() == IToken.Kind.KW_VOID) {
+            if (currToken.getKind() == IToken.Kind.TYPE)
+                type = Types.Type.toType(currToken.getText());
+            if (currToken.getKind() == IToken.Kind.KW_VOID)
+                type = Types.Type.VOID;
+            consume();
+            name = currToken.getText();
+            match(IToken.Kind.IDENT);
+            match(IToken.Kind.LPAREN);
+            if (currToken.getKind() == IToken.Kind.TYPE)
+                params.add(NameDefFunc());
+            while (currToken.getKind() == IToken.Kind.COMMA) {
+                consume();
+                params.add(NameDefFunc());
+            }
+            match(IToken.Kind.RPAREN);
+            while (DeclarationSet.contains(currToken.getKind()) || StatementSet.contains(currToken.getKind())) {
+                if (currToken.getKind() == IToken.Kind.TYPE) {
+                    decsAndStatements.add(DeclarationFunc());
+                }
+                if (StatementSet.contains(currToken.getKind())) {
+                    decsAndStatements.add(StatementFunc());
+                }
+                match(IToken.Kind.SEMI);
+            }
+            if (currToken.getKind() != IToken.Kind.EOF)
+                throw new SyntaxException("invalid lines after program scope");
+            return new Program(firstToken, type, name, params, decsAndStatements);
+        } else {
+            throw new SyntaxException("expected Type or void in Program");
+        }
+    }
+
+    NameDef NameDefFunc() throws PLCException {
+        String name;
+        String type;
+        IToken firstToken = currToken;
+        Dimension dim;
+        if (NameDefSet.contains(currToken.getKind())) {
+            type = currToken.getText();
+            consume();
+            if (currToken.getKind() == IToken.Kind.IDENT) {
+                name = currToken.getText();
+                match(IToken.Kind.IDENT);
+                return new NameDef(firstToken, type, name);
+            } else if (currToken.getKind() == IToken.Kind.LSQUARE) {
+                dim = DimensionFunc();
+                name = currToken.getText();
+                match(IToken.Kind.IDENT);
+                return new NameDefWithDim(firstToken, type, name, dim);
+            } else {
+                throw new SyntaxException("expected IDENT or Dimension in NameDef");
+            }
+        } else
+            throw new SyntaxException("expected Type in NameDef");
+    }
+
+    Declaration DeclarationFunc() throws PLCException {
+        NameDef name = null;
+        IToken op = null;
+        Expr e = null;
+        IToken firstToken = currToken;
+        name = NameDefFunc();
+        if (currToken.getKind() == IToken.Kind.ASSIGN || currToken.getKind() == IToken.Kind.LARROW) {
+            op = currToken;
+            consume();
+            e = ExprFunc();
+        }
+        return new VarDeclaration(firstToken, name, op, e);
+
     }
 
     Expr ExprFunc() throws PLCException {
@@ -110,8 +197,7 @@ public class Parser implements IParser {
         Expr right = null;
         Expr left = null;
         left = AdditiveExprFunc();
-        while ((currToken.getKind() == IToken.Kind.LARROW) || (currToken.getKind() == IToken.Kind.RARROW) ||
-                (currToken.getKind() == IToken.Kind.EQUALS) || (currToken.getKind() == IToken.Kind.NOT_EQUALS) ||
+        while ((currToken.getKind() == IToken.Kind.EQUALS) || (currToken.getKind() == IToken.Kind.NOT_EQUALS) ||
                 (currToken.getKind() == IToken.Kind.LE) || (currToken.getKind() == IToken.Kind.GE) ||
                 (currToken.getKind() == IToken.Kind.LT) || (currToken.getKind() == IToken.Kind.GT)) {
             IToken op = currToken;
@@ -223,12 +309,63 @@ public class Parser implements IParser {
                     e = ExprFunc();
                     match(IToken.Kind.RPAREN);
                 }
+                case COLOR_CONST -> {
+                    consume();
+                    e = new ColorConstExpr(firstToken);
+                }
+                case LANGLE -> {
+                    consume();
+                    e = ColorExprFunc();
+                    match(IToken.Kind.RANGLE);
+                }
+                case KW_CONSOLE -> {
+                    consume();
+                    e = new ConsoleExpr(firstToken);
+                }
                 default -> throw new SyntaxException("expected PrimaryExpr in PrimaryExpr");
             }
             return e;
         } else {
             throw new SyntaxException("expected primaryexpr in PrimaryExpr");
         }
+    }
+
+    Statement StatementFunc() throws PLCException {
+        IToken firstToken = currToken;
+        Expr e = null;
+        PixelSelector pixels = null;
+        if (currToken.getKind() == IToken.Kind.IDENT) {
+            String name = currToken.getText();
+            consume();
+            if (currToken.getKind() == IToken.Kind.LSQUARE) {
+                pixels = PixelSelectorFunc();
+            }
+            if (currToken.getKind() == IToken.Kind.ASSIGN) {
+                consume();
+                e = ExprFunc();
+                return new AssignmentStatement(firstToken, name, pixels, e);
+            } else if (currToken.getKind() == IToken.Kind.LARROW) {
+                consume();
+                e = ExprFunc();
+                return new ReadStatement(firstToken, name, pixels, e);
+            } else {
+                throw new SyntaxException("expected assign or left arrow in StatementFunc");
+            }
+        } else if (currToken.getKind() == IToken.Kind.KW_WRITE) {
+            consume();
+            e = ExprFunc();
+            match(IToken.Kind.RARROW);
+            Expr e1 = ExprFunc();
+            return new WriteStatement(firstToken, e, e1);
+        } else if (currToken.getKind() == IToken.Kind.RETURN) {
+            consume();
+            e = ExprFunc();
+            return new ReturnStatement(firstToken, e);
+        } else {
+            throw new SyntaxException("expected IDENT, 'write', or '^' in StatementFunc");
+
+        }
+
     }
 
     PixelSelector PixelSelectorFunc() throws PLCException {
@@ -249,18 +386,47 @@ public class Parser implements IParser {
         return e;
     }
 
+    Dimension DimensionFunc() throws PLCException {
+        IToken firstToken = currToken;
+        Expr x = null;
+        Expr y = null;
+        Dimension e = null;
+        lexer.peek();
+        if (currToken.getKind() == IToken.Kind.LSQUARE) {
+            consume();
+            x = ExprFunc();
+            match(IToken.Kind.COMMA);
+            y = ExprFunc();
+            match(IToken.Kind.RSQUARE);
+            e = new Dimension(firstToken, x, y);
+        } else
+            throw new SyntaxException("Expected LSQUARE in DimensionFunc");
+        return e;
+    }
+
+    ColorExpr ColorExprFunc() throws PLCException {
+        IToken firstToken = currToken;
+        Expr e0, e1, e2;
+        e0 = ExprFunc();
+        match(IToken.Kind.COMMA);
+        e1 = ExprFunc();
+        match(IToken.Kind.COMMA);
+        e2 = ExprFunc();
+        ColorExpr output = new ColorExpr(firstToken, e0, e1, e2);
+        return output;
+
+    }
+
     public ASTNode parse() throws PLCException {
         while (true) {
             consume();
-            return ExprFunc();
+            return ProgramFunc();
         }
         // return new IdentExpr(new Token(0, 0, "", IToken.Kind.IDENT, 0));
     }
 
     public Parser(String input) {
         lexer = getLexer(input);
-
-        // predict sets for all the functions
         PixelSelectorSet.add(IToken.Kind.LSQUARE);
         ConditionalExprSet.add(IToken.Kind.KW_IF);
         PrimaryExprSet.add(IToken.Kind.BOOLEAN_LIT);
@@ -269,6 +435,9 @@ public class Parser implements IParser {
         PrimaryExprSet.add(IToken.Kind.FLOAT_LIT);
         PrimaryExprSet.add(IToken.Kind.IDENT);
         PrimaryExprSet.add(IToken.Kind.LPAREN);
+        PrimaryExprSet.add(IToken.Kind.COLOR_CONST);
+        PrimaryExprSet.add(IToken.Kind.LANGLE);
+        PrimaryExprSet.add(IToken.Kind.KW_CONSOLE);
         UnaryExprPostfixSet.addAll(PrimaryExprSet);
         UnaryExprSet.addAll(UnaryExprPostfixSet);
         UnaryExprSet.add(IToken.Kind.BANG);
@@ -284,5 +453,14 @@ public class Parser implements IParser {
 
         ExprSet.addAll(ConditionalExprSet);
         ExprSet.addAll(LogicalOrExprSet);
+
+        ProgramSet.add(IToken.Kind.TYPE);
+        ProgramSet.add(IToken.Kind.KW_VOID);
+        NameDefSet.add(IToken.Kind.TYPE);
+        DeclarationSet.add(IToken.Kind.TYPE);
+        DimensionSet.add(IToken.Kind.LSQUARE);
+        StatementSet.add(IToken.Kind.IDENT);
+        StatementSet.add(IToken.Kind.KW_WRITE);
+        StatementSet.add(IToken.Kind.RETURN);
     }
 }
