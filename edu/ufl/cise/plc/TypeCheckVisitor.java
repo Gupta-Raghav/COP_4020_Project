@@ -80,8 +80,9 @@ public class TypeCheckVisitor implements ASTVisitor {
 
 	@Override
 	public Object visitColorConstExpr(ColorConstExpr colorConstExpr, Object arg) throws Exception {
-		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		colorConstExpr.setType(Type.COLOR);
+		return Type.COLOR;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
@@ -130,12 +131,10 @@ public class TypeCheckVisitor implements ASTVisitor {
 		Type exprType = (Type) unaryExpr.getExpr().visit(this, arg);
 		// Use the lookup table above to both check for a legal combination of operator
 		// and expression, and to get result type.
+		unaryExpr.getExpr().setType(Type.BOOLEAN);
 		Type resultType = unaryExprs.get(new Pair<Kind, Type>(op, exprType));
 		check(resultType != null, unaryExpr, "incompatible types for unaryExpr");
-		// Save the type of the unary expression in the AST node for use in code
-		// generation later.
 		unaryExpr.setType(resultType);
-		// return the type for convenience in this visitor.
 		return resultType;
 	}
 
@@ -149,47 +148,86 @@ public class TypeCheckVisitor implements ASTVisitor {
 		Type rightType = (Type) binaryExpr.getRight().visit(this, arg);
 		Type resultType = null;
 		switch (op) {// AND, OR, PLUS, MINUS, TIMES, DIV, MOD, EQUALS, NOT_EQUALS, LT, LE, GT,GE
+			case AND, OR -> {
+				if (leftType == BOOLEAN && rightType == BOOLEAN) {
+					resultType = BOOLEAN;
+				} else {
+					check(false, binaryExpr, "incompatible types for AND-OR");
+				}
+			}
 			case EQUALS, NOT_EQUALS -> {
 				check(leftType == rightType, binaryExpr, "incompatible types for comparison");
 				resultType = Type.BOOLEAN;
 			}
-			case PLUS -> {
+			case PLUS, MINUS -> {
 				if (leftType == Type.INT && rightType == Type.INT)
 					resultType = Type.INT;
-				else if (leftType == Type.STRING && rightType == Type.STRING)
-					resultType = Type.STRING;
+				else if (leftType == Type.FLOAT && rightType == Type.FLOAT)
+					resultType = Type.FLOAT;
+				else if (leftType == Type.INT && rightType == Type.FLOAT)
+					resultType = Type.FLOAT;
+				else if (leftType == Type.FLOAT && rightType == Type.INT)
+					resultType = Type.FLOAT;
+				else if (leftType == Type.COLOR && rightType == Type.COLOR)
+					resultType = Type.COLOR;
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLORFLOAT)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLOR)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.COLOR && rightType == Type.COLORFLOAT)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.IMAGE && rightType == Type.IMAGE)
+					resultType = Type.IMAGE;
+				else
+					check(false, binaryExpr, "incompatible types for SUMMATION");
+			}
+			case TIMES, DIV, MOD -> {
+				if (leftType == Type.INT && rightType == Type.INT)
+					resultType = Type.INT;
+				else if (leftType == Type.FLOAT && rightType == Type.FLOAT)
+					resultType = Type.FLOAT;
+				else if (leftType == Type.INT && rightType == Type.FLOAT)
+					resultType = Type.FLOAT;
+				else if (leftType == Type.FLOAT && rightType == Type.INT)
+					resultType = Type.FLOAT;
+				else if (leftType == Type.COLOR && rightType == Type.COLOR)
+					resultType = Type.COLOR;
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLORFLOAT)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLOR)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.COLOR && rightType == Type.COLORFLOAT)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.IMAGE && rightType == Type.IMAGE)
+					resultType = Type.IMAGE;
 				else if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN)
 					resultType = Type.BOOLEAN;
+				else if (leftType == Type.IMAGE && rightType == Type.INT)
+					resultType = Type.IMAGE;
+				else if (leftType == Type.IMAGE && rightType == Type.FLOAT)
+					resultType = Type.IMAGE;
+				else if (leftType == Type.INT && rightType == Type.COLOR)
+					resultType = Type.COLOR;
+				else if (leftType == Type.COLOR && rightType == Type.INT)
+					resultType = Type.COLOR;
+				else if (leftType == Type.FLOAT && rightType == Type.COLOR)
+					resultType = Type.COLORFLOAT;
+				else if (leftType == Type.COLOR && rightType == Type.FLOAT)
+					resultType = Type.COLORFLOAT;
 				else
-					check(false, binaryExpr, "incompatible types for operator");
-			}
-			case MINUS -> {
-				if (leftType == Type.INT && rightType == Type.INT)
-					resultType = Type.INT;
-				else if (leftType == Type.STRING && rightType == Type.STRING)
-					resultType = Type.STRING;
-				else
-					check(false, binaryExpr, "incompatible types for operator");
-			}
-			case TIMES -> {
-				if (leftType == Type.INT && rightType == Type.INT)
-					resultType = Type.INT;
-				else if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN)
-					resultType = Type.BOOLEAN;
-				else
-					check(false, binaryExpr, "incompatible types for operator");
-			}
-			case DIV -> {
-				if (leftType == Type.INT && rightType == Type.INT)
-					resultType = Type.INT;
-				else
-					check(false, binaryExpr, "incompatible types for operator");
+					check(false, binaryExpr, "incompatible types for MUL-DIV-MOD");
 			}
 			case LT, LE, GT, GE -> {
-				if (leftType == rightType)
+				if (leftType == Type.INT && rightType == Type.INT)
+					resultType = Type.BOOLEAN;
+				else if (leftType == Type.FLOAT && rightType == Type.FLOAT)
+					resultType = Type.BOOLEAN;
+				else if (leftType == Type.INT && rightType == Type.FLOAT)
+					resultType = Type.BOOLEAN;
+				else if (leftType == Type.FLOAT && rightType == Type.INT)
 					resultType = Type.BOOLEAN;
 				else
-					check(false, binaryExpr, "incompatible types for operator");
+					check(false, binaryExpr, "incompatible types for comparing");
 			}
 			default -> {
 				throw new Exception("compiler error");
@@ -215,8 +253,14 @@ public class TypeCheckVisitor implements ASTVisitor {
 
 	@Override
 	public Object visitConditionalExpr(ConditionalExpr conditionalExpr, Object arg) throws Exception {
-		// TODO implement this method
-		throw new UnsupportedOperationException();
+		Type expType = (Type) conditionalExpr.getCondition().visit(this, arg);
+		check(expType == Type.BOOLEAN, conditionalExpr, "Conditional Selector can only be applied to BOOLEAN");
+		Type trueType = (Type) conditionalExpr.getTrueCase().visit(this, arg);
+		Type flaseType = (Type) conditionalExpr.getTrueCase().visit(this, arg);
+		check(trueType == flaseType, conditionalExpr, "True type and false type must be same");
+		conditionalExpr.setType(trueType); // IDK IF this is correct will have to check again
+		return Type.COLOR;
+		// throw new UnsupportedOperationException();
 	}
 
 	@Override
