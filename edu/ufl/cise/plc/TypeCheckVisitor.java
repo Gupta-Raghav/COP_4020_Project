@@ -60,14 +60,16 @@ public class TypeCheckVisitor implements ASTVisitor {
 
 	@Override
 	public Object visitStringLitExpr(StringLitExpr stringLitExpr, Object arg) throws Exception {
-		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		stringLitExpr.setType(Type.STRING);
+		return Type.STRING;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
 	public Object visitIntLitExpr(IntLitExpr intLitExpr, Object arg) throws Exception {
-		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		intLitExpr.setType(Type.INT);
+		return Type.INT;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
@@ -141,13 +143,74 @@ public class TypeCheckVisitor implements ASTVisitor {
 	@Override
 	public Object visitBinaryExpr(BinaryExpr binaryExpr, Object arg) throws Exception {
 		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
+		Kind op = binaryExpr.getOp().getKind();
+		Type leftType = (Type) binaryExpr.getLeft().visit(this, arg);
+		Type rightType = (Type) binaryExpr.getRight().visit(this, arg);
+		Type resultType = null;
+		switch (op) {// AND, OR, PLUS, MINUS, TIMES, DIV, MOD, EQUALS, NOT_EQUALS, LT, LE, GT,GE
+			case EQUALS, NOT_EQUALS -> {
+				check(leftType == rightType, binaryExpr, "incompatible types for comparison");
+				resultType = Type.BOOLEAN;
+			}
+			case PLUS -> {
+				if (leftType == Type.INT && rightType == Type.INT)
+					resultType = Type.INT;
+				else if (leftType == Type.STRING && rightType == Type.STRING)
+					resultType = Type.STRING;
+				else if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN)
+					resultType = Type.BOOLEAN;
+				else
+					check(false, binaryExpr, "incompatible types for operator");
+			}
+			case MINUS -> {
+				if (leftType == Type.INT && rightType == Type.INT)
+					resultType = Type.INT;
+				else if (leftType == Type.STRING && rightType == Type.STRING)
+					resultType = Type.STRING;
+				else
+					check(false, binaryExpr, "incompatible types for operator");
+			}
+			case TIMES -> {
+				if (leftType == Type.INT && rightType == Type.INT)
+					resultType = Type.INT;
+				else if (leftType == Type.BOOLEAN && rightType == Type.BOOLEAN)
+					resultType = Type.BOOLEAN;
+				else
+					check(false, binaryExpr, "incompatible types for operator");
+			}
+			case DIV -> {
+				if (leftType == Type.INT && rightType == Type.INT)
+					resultType = Type.INT;
+				else
+					check(false, binaryExpr, "incompatible types for operator");
+			}
+			case LT, LE, GT, GE -> {
+				if (leftType == rightType)
+					resultType = Type.BOOLEAN;
+				else
+					check(false, binaryExpr, "incompatible types for operator");
+			}
+			default -> {
+				throw new Exception("compiler error");
+			}
+		}
+		binaryExpr.setType(resultType);
+		return resultType;
 	}
 
 	@Override
 	public Object visitIdentExpr(IdentExpr identExpr, Object arg) throws Exception {
 		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		String name = identExpr.getName();
+		Declaration dec = symbolTable.lookup(name);
+		check(dec != null, identExpr, "undefined identifier " + name);
+		check(dec.isAssigned(), identExpr, "using uninitialized variable");
+		identExpr.setDec(dec); // save declaration--will be useful later.
+		Type type = dec.getType();
+		identExpr.setType(type);
+		return type;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
@@ -196,8 +259,13 @@ public class TypeCheckVisitor implements ASTVisitor {
 
 	@Override
 	public Object visitReadStatement(ReadStatement readStatement, Object arg) throws Exception {
-		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		Type sourceType = (Type) readStatement.getSource().visit(this, arg);
+		Type destType = (Type) readStatement.getTargetDec().visit(this, arg);
+		check(destType == Type.STRING || destType == Type.CONSOLE, readStatement,
+				"illegal destination type for read");
+		check(sourceType != Type.CONSOLE, readStatement, "illegal source type for write");
+		return null;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
@@ -209,7 +277,6 @@ public class TypeCheckVisitor implements ASTVisitor {
 	@Override
 	public Object visitProgram(Program program, Object arg) throws Exception {
 		// TODO: this method is incomplete, finish it.
-
 		// Save root of AST so return type can be accessed in return statements
 		root = program;
 

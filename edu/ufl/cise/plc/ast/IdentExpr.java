@@ -3,9 +3,9 @@ package edu.ufl.cise.plc.ast;
 import edu.ufl.cise.plc.IToken;
 
 public class IdentExpr extends Expr {
-	
+
 	Declaration dec;
-		
+
 	public IdentExpr(IToken firstToken) {
 		super(firstToken);
 	}
@@ -28,5 +28,8 @@ public class IdentExpr extends Expr {
 		this.dec = dec;
 	}
 
-	
+	public String getName() {
+		return null;
+	}
+
 }

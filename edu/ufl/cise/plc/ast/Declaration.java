@@ -8,7 +8,6 @@ public abstract class Declaration extends ASTNode {
 	public Declaration(IToken firstToken) {
 		super(firstToken);
 	}
-	
 
 	boolean initialized = false;
 
@@ -21,9 +20,12 @@ public abstract class Declaration extends ASTNode {
 	public void setInitialized(boolean initialized) {
 		this.initialized = initialized;
 	}
-	
-	//returns null if dimensions not specified in Declaration.
+
+	// returns null if dimensions not specified in Declaration.
 	public abstract Dimension getDim();
 
+	public boolean isAssigned() {
+		return false;
+	}
 
 }
