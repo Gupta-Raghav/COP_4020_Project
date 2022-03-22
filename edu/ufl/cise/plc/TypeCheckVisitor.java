@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.junit.jupiter.params.provider.NullEnum;
+
 import edu.ufl.cise.plc.IToken.Kind;
 import edu.ufl.cise.plc.ast.ASTNode;
 import edu.ufl.cise.plc.ast.ASTVisitor;
@@ -29,6 +31,7 @@ import edu.ufl.cise.plc.ast.ReturnStatement;
 import edu.ufl.cise.plc.ast.StringLitExpr;
 import edu.ufl.cise.plc.ast.Types.Type;
 import edu.ufl.cise.plc.ast.UnaryExpr;
+import edu.ufl.cise.plc.ast.Statement;
 import edu.ufl.cise.plc.ast.UnaryExprPostfix;
 import edu.ufl.cise.plc.ast.VarDeclaration;
 import edu.ufl.cise.plc.ast.WriteStatement;
@@ -131,7 +134,6 @@ public class TypeCheckVisitor implements ASTVisitor {
 		Type exprType = (Type) unaryExpr.getExpr().visit(this, arg);
 		// Use the lookup table above to both check for a legal combination of operator
 		// and expression, and to get result type.
-		unaryExpr.getExpr().setType(Type.BOOLEAN);
 		Type resultType = unaryExprs.get(new Pair<Kind, Type>(op, exprType));
 		check(resultType != null, unaryExpr, "incompatible types for unaryExpr");
 		unaryExpr.setType(resultType);
@@ -164,9 +166,10 @@ public class TypeCheckVisitor implements ASTVisitor {
 					resultType = Type.INT;
 				else if (leftType == Type.FLOAT && rightType == Type.FLOAT)
 					resultType = Type.FLOAT;
-				else if (leftType == Type.INT && rightType == Type.FLOAT)
+				else if (leftType == Type.INT && rightType == Type.FLOAT) {
+
 					resultType = Type.FLOAT;
-				else if (leftType == Type.FLOAT && rightType == Type.INT)
+				} else if (leftType == Type.FLOAT && rightType == Type.INT)
 					resultType = Type.FLOAT;
 				else if (leftType == Type.COLOR && rightType == Type.COLOR)
 					resultType = Type.COLOR;
@@ -259,7 +262,7 @@ public class TypeCheckVisitor implements ASTVisitor {
 		Type flaseType = (Type) conditionalExpr.getTrueCase().visit(this, arg);
 		check(trueType == flaseType, conditionalExpr, "True type and false type must be same");
 		conditionalExpr.setType(trueType); // IDK IF this is correct will have to check again
-		return Type.COLOR;
+		return conditionalExpr.getType();
 		// throw new UnsupportedOperationException();
 	}
 
@@ -288,34 +291,72 @@ public class TypeCheckVisitor implements ASTVisitor {
 	// Work incrementally and systematically, testing as you go.
 	public Object visitAssignmentStatement(AssignmentStatement assignmentStatement, Object arg) throws Exception {
 		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		Type t1 = (Type) assignmentStatement.getSelector().visit(this, arg);
+		Type t2 = (Type) assignmentStatement.getExpr().visit(this, arg);
+		check(!t1.equals(t2), assignmentStatement, "Error in visitStatementAssign");
+
+		return null;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
 	public Object visitWriteStatement(WriteStatement writeStatement, Object arg) throws Exception {
 		Type sourceType = (Type) writeStatement.getSource().visit(this, arg);
 		Type destType = (Type) writeStatement.getDest().visit(this, arg);
-		check(destType == Type.STRING || destType == Type.CONSOLE, writeStatement,
+		check(destType != Type.STRING || destType != Type.CONSOLE, writeStatement,
 				"illegal destination type for write");
-		check(sourceType != Type.CONSOLE, writeStatement, "illegal source type for write");
+		check(sourceType == Type.CONSOLE, writeStatement, "illegal source type for write");
 		return null;
 	}
 
 	@Override
 	public Object visitReadStatement(ReadStatement readStatement, Object arg) throws Exception {
-		Type sourceType = (Type) readStatement.getSource().visit(this, arg);
-		Type destType = (Type) readStatement.getTargetDec().visit(this, arg);
-		check(destType == Type.STRING || destType == Type.CONSOLE, readStatement,
-				"illegal destination type for read");
-		check(sourceType != Type.CONSOLE, readStatement, "illegal source type for write");
+		Type lhs = (Type) readStatement.getTargetType();
+		Type sourceDec = (Type) readStatement.getTargetDec().visit(this, arg);
+		check(sourceDec == null, readStatement, "illegal destination type for read");
+		check(sourceDec != Type.INT, readStatement, "Error in read Statment");
+
 		return null;
 		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
 	public Object visitVarDeclaration(VarDeclaration declaration, Object arg) throws Exception {
-		// TODO: implement this method
-		throw new UnsupportedOperationException("Unimplemented visit method.");
+		// boolean b = symbolTable.insert(declaration.getName(), declaration);
+		// chcek( ,declaration, "Error in visitDeclaration");
+		// if ((declaration.getDim().getHeight() == null &&
+		// declaration.getDim().getWidth() != null)
+		// || (declaration.getDim().getWidth() == null &&
+		// declaration.getDim().getHeight() != null)) {
+		// throw new SyntaxException(declaration, "Error in visitDeclaration");
+		// }
+		// if (declaration.getDim().getWidth() != null &&
+		// declaration.getDim().getHeight() != null) {
+		// Type t1 = (Type) declaration.getDim().getWidth().visit(this, arg);
+		// Type t2 = (Type) declaration.getDim().getHeight().visit(this, arg);
+		// if (t1.equals(Type.INT) && t2.equals(Type.INT) &&
+		// declaration.getType().equals(Kind.IMAGE_OP)) {
+		// declaration.setType(Types.getType(declaration.type));
+		// } else {
+		// throw new SyntaxException(declaration, "Error in visitDeclaration");
+		// }
+		// } else {
+		// declaration.setType(Type.getType(declaration));
+		// }
+		String name = declaration.getName();
+		boolean inserted = symbolTable.insert(name, declaration);
+		// check(inserted, declaration, "variable " + name + "already declared");
+		// Expr initializer = declaration.isInitialized();
+		// if (initializer != null) {
+		// // infer type of initializer
+		// Type initializerType = (Type) initializer.visit(this, arg);
+		// check(assignmentCompatible(declaration.getType(), initializerType),
+		// declaration,
+		// "type of expression and declared type do not match");
+		// declaration.setAssigned(true);
+		// }
+		return null;
+		// throw new UnsupportedOperationException("Unimplemented visit method.");
 	}
 
 	@Override
@@ -327,7 +368,13 @@ public class TypeCheckVisitor implements ASTVisitor {
 		// Check declarations and statements
 		List<ASTNode> decsAndStatements = program.getDecsAndStatements();
 		for (ASTNode node : decsAndStatements) {
-			node.visit(this, arg);
+			if (node instanceof Declaration) {
+				Declaration d1 = (Declaration) node;
+				d1.visit(this, arg);
+			} else {
+				Statement s1 = (Statement) node;
+				s1.visit(this, arg);
+			}
 		}
 		return program;
 	}
