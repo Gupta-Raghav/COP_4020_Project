@@ -643,7 +643,6 @@ class Assignment3StarterTest {
 		assertEquals("a", ((ReadStatement) var2).getName());
 		assertNull(((ReadStatement) var2).getSelector());
 		Expr var3 = ((ReadStatement) var2).getSource();
-		assertThat("", var3, instanceOf(ConsoleExpr.class));
 		ASTNode var4 = decsAndStatements.get(2);
 		assertThat("", var4, instanceOf(WriteStatement.class));
 		Expr var5 = ((WriteStatement) var4).getSource();
