@@ -27,4 +27,10 @@ public class CompilerComponentFactory {
 		return new TypeCheckVisitor();
 	}
 
+	public static ASTVisitor getCodeGenerator(String packageName) throws PLCException {
+
+		return new CodeGenVisitor(packageName);
+
+	}
+
 }
