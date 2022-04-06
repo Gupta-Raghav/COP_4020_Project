@@ -2,92 +2,106 @@ package edu.ufl.cise.plc;
 
 public class Token implements IToken {
 
-    private Kind Type;
-    private String sourceCode;
-    private SourceLocation pos;
+    private Kind kind;
+    private String rawText = "";
+    private SourceLocation sourceLocation;
+    private int intValue = 0;
+    private float floatValue = 0;
+    private boolean booleanValue;
+    private String stringValue;
     private int length;
+    private boolean complete = false;
 
-    public Token(Kind Type, String sourceCode, SourceLocation pos, int length) {
-        this.Type = Type;
-        this.sourceCode = sourceCode;
-        this.pos = pos;
+    public Token(Kind kind, String rawText, int length, SourceLocation sourceLocation) {
+        this.kind = kind;
+        this.rawText = rawText;
         this.length = length;
+        this.sourceLocation = sourceLocation;
+    }
+
+    public Token() {
+    }
+
+    public Token(SourceLocation sourceLocation) {
+        this.sourceLocation = sourceLocation;
     }
 
     @Override
     public Kind getKind() {
-        return Type;
+        return kind;
     }
 
     @Override
     public String getText() {
-        return sourceCode;
+        return rawText;
     }
 
     @Override
     public SourceLocation getSourceLocation() {
-        return pos;
+        return sourceLocation;
     }
 
     @Override
     public int getIntValue() {
-        return Integer.valueOf(sourceCode);
+        return intValue;
     }
 
     @Override
     public float getFloatValue() {
-        return Float.valueOf(sourceCode);
+        return floatValue;
     }
 
     @Override
     public boolean getBooleanValue() {
-        return Boolean.valueOf(sourceCode);
+        return booleanValue;
     }
 
     @Override
     public String getStringValue() {
-
-        String resString = "";
-
-        for (int i = 1; i < sourceCode.length() - 1; i++) {
-
-            if (sourceCode.charAt(i) != '\\') {
-                resString += sourceCode.charAt(i);
-            } else {
-                switch (sourceCode.charAt(i + 1)) {
-
-                    case 'r' -> {
-                        resString += '\r';
-                    }
-                    case 'f' -> {
-                        resString += '\f';
-                    }
-                    case 'n' -> {
-                        resString += '\n';
-                    }
-                    case 't' -> {
-                        resString += '\t';
-                    }
-                    case 'b' -> {
-                        resString += '\b';
-                    }
-                    case '"' -> {
-                        resString += '\"';
-                    }
-                    case '\'' -> {
-                        resString += '\'';
-                    }
-                    case '\\' -> {
-                        resString += '\\';
-                    }
-
-                }
-                i++;
-            }
-
-        }
-
-        return resString;
+        return stringValue;
     }
 
+    public int getLength() {
+        return length;
+    }
+
+    public void setSourceLocation(int line, int column) {
+        sourceLocation = new SourceLocation(line, column);
+    }
+
+    public void setKind(Kind kind) {
+        this.kind = kind;
+    }
+
+    public void concatText(char letter) {
+        this.rawText += letter;
+    }
+
+    public void addLength() {
+        this.length++;
+    }
+
+    public boolean getComplete() {
+        return this.complete;
+    }
+
+    public void setComplete() {
+        this.complete = true;
+    }
+
+    public void setIntValue(int val) {
+        this.intValue = val;
+    }
+
+    public void setFloatValue(float val) {
+        this.floatValue = val;
+    }
+
+    public void setStringValue(String val) {
+        this.stringValue = val;
+    }
+
+    public void setBooleanValue(boolean bool) {
+        this.booleanValue = bool;
+    }
 }

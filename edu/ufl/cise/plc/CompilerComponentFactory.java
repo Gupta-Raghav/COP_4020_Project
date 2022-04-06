@@ -18,7 +18,9 @@ public class CompilerComponentFactory {
 	}
 
 	public static IParser getParser(String input) throws PLCException {
-		return new Parser(input);
+		Lexer lex = new Lexer(input);
+		return new Parser(lex.tokens);
+		// return new Parser(input);
 	}
 
 	public static ASTVisitor getTypeChecker() throws PLCException {

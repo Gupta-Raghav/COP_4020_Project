@@ -1,688 +1,667 @@
 package edu.ufl.cise.plc;
 
-import java.lang.Thread.State;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Map;
-
-import edu.ufl.cise.plc.IToken.Kind;
 
 public class Lexer implements ILexer {
 
-    int pos = 0;
-    int line = 0;
-    int col = 0;
-    int startPos = 0;
+    public CharSequence inputChars;
+    public ArrayList<Token> tokens;
+    private Lexer.State state;
+    private int lexerLine = 0;
+    private int lexerColumn = 0;
+    private int currToken = -1;
+    private HashMap<String, Token.Kind> reservedMap = new HashMap<>();
 
-    @Override
-    public IToken next() throws LexicalException {
-        if (pos >= sourceCode.length()) {
-            Token newToken = new Token(IToken.Kind.EOF, null, null, 0);
-            tokens.add(newToken);
-            return newToken;
+    private enum State {
+        START,
+        IN_IDENT,
+        IN_STRING,
+        IN_COMMENT,
+        IN_FLOAT,
+        IN_INT,
+        HAVE_DOT,
+        HAVE_EQ,
+        HAVE_MINUS,
+        HAVE_GREATER,
+        HAVE_LESS,
+        HAVE_EXCLAMATION,
+        START_ZERO
+    }
+
+    public void setState(State newState) {
+        this.state = newState;
+    }
+
+    public State getState() {
+        return this.state;
+    }
+
+    public void incrementLexerLine() {
+        lexerLine++;
+    }
+
+    public void resetLexerColumn() {
+        lexerColumn = 0;
+    }
+
+    public void incrementLexerColumn() {
+        lexerColumn++;
+    }
+
+    public void decrementLexerLine() {
+        lexerLine--;
+    }
+
+    public void decrementLexerColumn() {
+        lexerColumn--;
+    }
+
+    public Lexer(String input) {
+
+        this.inputChars = input;
+        this.tokens = new ArrayList<>();
+        identifyToken(this.inputChars);
+
+    }
+
+    // FOR TESTING PURPOSES
+    public static void main(String args[]) {
+        Lexer lex = new Lexer("""
+                "string
+                """);
+
+        for (int i = 0; i < lex.tokens.size(); i++) {
+
+            System.out.println(lex.tokens.get(i).getText());
+            System.out.println("Kind: " + lex.tokens.get(i).getKind());
+            System.out.println("Location: " + lex.tokens.get(i).getSourceLocation());
+            System.out.println("Length: " + lex.tokens.get(i).getLength());
+            if (lex.tokens.get(i).getKind() == IToken.Kind.INT_LIT)
+                System.out.println("Value: " + lex.tokens.get(i).getIntValue() + '\n');
+            if (lex.tokens.get(i).getKind() == IToken.Kind.FLOAT_LIT)
+                System.out.println("Value: " + lex.tokens.get(i).getFloatValue() + '\n');
+            if (lex.tokens.get(i).getKind() == IToken.Kind.STRING_LIT)
+                System.out.println("Value: " + lex.tokens.get(i).getStringValue() + '\n');
+            if (lex.tokens.get(i).getKind() == IToken.Kind.BOOLEAN_LIT)
+                System.out.println("Value: " + lex.tokens.get(i).getBooleanValue() + '\n');
         }
 
-        Token newToken = getToken();
-        tokens.add(newToken);
-        return newToken;
-
     }
 
-    @Override
-    public IToken peek() throws LexicalException {
-        if (pos >= sourceCode.length()) {
-            Token newToken = new Token(IToken.Kind.EOF, null, null, 0);
-            col -= (pos - startPos) + 1;
-            pos = startPos;
-            // to do-> figure out how to track the position of the token
+    /*
+     * RUNNING LIST OF ERRORS
+     * handling big ints
+     * unclosed quotes in strings
+     * escape sequences in strings
+     *
+     */
 
-            return newToken;
-        }
-        Token newToken = getToken();
+    public void identifyToken(CharSequence inputChars) {
 
-        if (newToken.getKind() == IToken.Kind.EOF) {
-            col--;
-            pos--;
-        } else {
-            col -= (pos - startPos);
-            pos = startPos;
-        }
-        return newToken;
-    }
+        setState(State.START);
+        buildMap();
+        Token tempToken = new Token();
+        for (int i = 0; i < inputChars.length(); i++) {
 
-    private enum STATE {
-        START, IN_IDENT, HAVE_ZERO, HAVE_DOT, IN_STRING,
-        IN_FLOAT, IN_NUM, HAVE_EQ, HAVE_MINUS, HAVE_PLUS, WHITE_SPACE, TIMES, HAVE_LT, HAVE_EX, HAVE_GT,
-        HAVE_SLASH, IN_COMMENT;
-    }
-
-    private STATE currState;
-
-    ArrayList<Token> tokens = new ArrayList<Token>();
-
-    String sourceCode;
-
-    HashMap<String, IToken.Kind> rsrvd = new HashMap<>(); // hashmap for the reserved words of the programming language,
-                                                          // we
-    // will use this after we have the identifier and we will compare it
-    // with the hashmap.
-
-    // rsrvd.put(TYPE, 'int'), somehow create a hashmap of all the reserved words
-    // like this
-
-    public Lexer(String sourceCode) {
-        this.sourceCode = sourceCode;
-        currState = STATE.START;
-        HashMap();
-
-    }
-
-    private Token getToken() throws LexicalException {
-
-        IToken.SourceLocation tokenPosition = null;
-
-        // Can i find some other way to iterate over the complete code, for loop ? -
-        // too
-        // tacky plus conditions will make it difficult
-        // while loop?
-        while (true) {
-
-            if (pos >= sourceCode.length()) {
-                Token newToken = new Token(IToken.Kind.EOF, null, null, 0);
-                return newToken;
+            // reset column to 0 on new line
+            if (inputChars.charAt(i) == '\n') {
+                resetLexerColumn();
             }
 
-            char ch = sourceCode.charAt(pos);
-            switch (currState) { // implementing the DFA, this switch Statement is to define the States of the
-                // DFA
+            char c = inputChars.charAt(i); // get current char
+
+            switch (state) {
                 case START -> {
-                    switch (ch) { // this switch case works on the characters of the string.
-                        case ' ', '\t', '\r' -> {
-                            col++;
-                            pos++;
-                        }
-                        case '\n' -> {
-                            line++; // line
-                            pos++;
-                            col = 0;
-                        }
-                        case '+' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            // can i remove this?
-                            Token newToken = new Token(IToken.Kind.PLUS, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '=' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.HAVE_EQ;
-                            col++;
-                            pos++;
-
-                        }
-                        case '*' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.TIMES, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '#' -> {
-                            currState = STATE.IN_COMMENT;
-                            col++;
-                            pos++;
-                        }
-                        case '/' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.DIV, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '%' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.MOD, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '(' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.LPAREN, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case ')' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.RPAREN, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '[' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.LSQUARE, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case ']' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.RSQUARE, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '&' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.AND, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '|' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.OR, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case ';' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.SEMI, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case ',' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.COMMA, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '^' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            Token newToken = new Token(IToken.Kind.RETURN, String.valueOf(ch), tokenPosition, 1);
-                            tokens.add(newToken);
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-
-                        case '-' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.HAVE_MINUS;
-                            col++;
-                            pos++;
-                        }
-
-                        case '!' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.HAVE_EX;
-                            col++;
-                            pos++;
-                        }
-
-                        case '<' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.HAVE_LT;
-                            col++;
-                            pos++;
-                        }
-                        case '>' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.HAVE_GT;
-                            col++;
-                            pos++;
-                        }
-                        case '"' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.IN_STRING;
-                            col++;
-                            pos++;
-                        }
-                        case '0' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.HAVE_ZERO;
-                            col++;
-                            pos++;
-                        }
-                        case '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
-                            tokenPosition = new IToken.SourceLocation(line, col);
-                            startPos = pos;
-                            currState = STATE.IN_NUM;
-                            col++;
-                            pos++;
-                        }
-                        // case 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-                        // 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'-> {
-                        // tokenPosition = new IToken.SourceLocation(line, col);
-                        // startPos = pos;
-                        // currState = STATE.IN_IDENT;
-                        // col++;
-                        // pos++;
-                        // }
-                        // case 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
-                        // 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'-> {
-                        // tokenPosition = new IToken.SourceLocation(line, col);
-                        // startPos = pos;
-                        // currState = STATE.IN_IDENT;
-                        // col++;
-                        // pos++;
-                        // }
-                        // case '$'-> {
-                        // tokenPosition = new IToken.SourceLocation(line, col);
-                        // startPos = pos;
-                        // currState = STATE.IN_IDENT;
-                        // col++;
-                        // pos++;
-                        // }
-                        // case '_'-> {
-                        // tokenPosition = new IToken.SourceLocation(line, col);
-                        // startPos = pos;
-                        // currState = STATE.IN_IDENT;
-                        // col++;
-                        // pos++;
-                        // }
-                        default -> {
-                            if (Character.isJavaIdentifierStart(ch)) {
-                                tokenPosition = new IToken.SourceLocation(line, col);
-                                startPos = pos;
-                                currState = STATE.IN_IDENT;
-                                col++;
-                                pos++;
-
-                            } else {
-                                tokenPosition = new IToken.SourceLocation(line, col);
-                                throw new LexicalException("Invalid character", tokenPosition.line(),
-                                        tokenPosition.column());
-                            }
-                        }
-
-                    }
+                    Token token = start(c, lexerLine, lexerColumn);
+                    if (token != null && token.getComplete())
+                        tokens.add(token);
+                    else
+                        tempToken = token;
                 }
                 case IN_IDENT -> {
-                    if (Character.isJavaIdentifierPart(ch)) {
-                        col++;
-                        pos++;
-
-                    } else {
-                        String ident = sourceCode.substring(startPos, pos);
-                        for (Map.Entry<String, IToken.Kind> entry : rsrvd.entrySet()) {
-                            if (ident.equals(entry.getKey())) {
-                                Token newToken = new Token(entry.getValue(), ident, tokenPosition,
-                                        (pos - startPos));
-                                currState = STATE.START;
-                                return newToken;
-                            }
-                        }
-                        Token newToken = new Token(IToken.Kind.IDENT, ident, tokenPosition, pos - startPos);
-                        currState = STATE.START;
-                        return newToken;
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete()) {
+                        tokens.add(tempToken);
+                        i--;
+                        decrementLexerColumn();
                     }
                 }
-                case HAVE_ZERO -> {
-                    switch (ch) {
-                        case '.' -> {
-                            currState = STATE.HAVE_DOT;
-                            pos++;
-                            col++;
-                        }
-                        default -> {
-                            Token newToken = new Token(IToken.Kind.INT_LIT, sourceCode.substring(startPos, pos),
-                                    tokenPosition, (pos - startPos));
-                            currState = STATE.START;
-                            return newToken;
+                case IN_STRING -> {
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete())
+                        tokens.add(tempToken);
+                }
+                case IN_INT -> {
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete()) {
+                        tokens.add(tempToken);
+                        i--;
+                        decrementLexerColumn();
+                    }
+                }
+                case START_ZERO -> {
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete()) {
+                        tokens.add(tempToken);
+                        if (tempToken.getLength() == 1) {
+                            // include token after single character
+                            i--;
+                            decrementLexerColumn();
                         }
                     }
                 }
-                case IN_NUM -> {
-                    switch (ch) {
-                        case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
-                            pos++;
-                            col++;
-                        }
-                        case '.' -> {
-                            currState = STATE.HAVE_DOT;
-                            col++;
-                            pos++;
-                        }
-                        default -> {
-                            String str = sourceCode.substring(startPos, pos);
-                            Token newToken = new Token(IToken.Kind.INT_LIT, str, tokenPosition,
-                                    (pos - startPos));
-
-                            try {
-                                int temp = Integer.valueOf(str);
-                            } catch (Exception e) {
-                                throw new LexicalException("Invalid integer", tokenPosition.line(),
-                                        tokenPosition.column());
-                            }
-                            currState = STATE.START;
-                            return newToken;
+                case HAVE_LESS, HAVE_GREATER, HAVE_EQ, HAVE_MINUS, HAVE_EXCLAMATION -> {
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete()) {
+                        tokens.add(tempToken);
+                        if (tempToken.getLength() == 1) {
+                            // include token after single characteR
+                            i--;
+                            decrementLexerColumn();
                         }
                     }
                 }
                 case HAVE_DOT -> {
-                    switch (ch) {
-                        case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
-                            currState = STATE.IN_FLOAT;
-                            col++;
-                            pos++;
-                        }
-                        default -> {
-                            throw new LexicalException("found error with input number(check number again)",
-                                    tokenPosition.line(), tokenPosition.column());
-                        }
-                    }
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete())
+                        tokens.add(tempToken);
+
                 }
                 case IN_FLOAT -> {
-                    switch (ch) {
-                        case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
-                            col++;
-                            pos++;
-                        }
-                        default -> {
-                            String fl = sourceCode.substring(startPos, pos);
-
-                            Token newToken = new Token(IToken.Kind.FLOAT_LIT, sourceCode.substring(startPos, pos),
-                                    tokenPosition, (pos - startPos));
-
-                            try {
-                                float floatValue = Float.valueOf(fl);
-                            } catch (Exception e) {
-                                throw new LexicalException("Invalid float input", tokenPosition.line(),
-                                        tokenPosition.column());
-                            }
-                            currState = STATE.START;
-                            return newToken;
-                        }
-                    }
-                }
-                case HAVE_GT -> {
-
-                    switch (ch) {
-
-                        case '=' -> {
-                            Token newToken = new Token(IToken.Kind.GE, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '>' -> {
-                            Token newToken = new Token(IToken.Kind.RANGLE, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        default -> {
-                            Token newToken = new Token(IToken.Kind.GT, sourceCode.substring(startPos, pos),
-                                    tokenPosition,
-                                    1);
-                            currState = STATE.START;
-                            return newToken;
-                        }
-
-                    }
-
-                }
-                case HAVE_LT -> {
-
-                    switch (ch) {
-
-                        case '=' -> {
-                            Token newToken = new Token(IToken.Kind.LE, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '-' -> {
-                            Token newToken = new Token(IToken.Kind.LARROW, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.HAVE_MINUS;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '<' -> {
-                            Token newToken = new Token(IToken.Kind.LANGLE, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        default -> {
-                            Token newToken = new Token(IToken.Kind.LT, sourceCode.substring(startPos, pos),
-                                    tokenPosition,
-                                    1);
-                            currState = STATE.START;
-                            return newToken;
-                        }
-
-                    }
-
-                }
-                case HAVE_EQ -> {
-
-                    switch (ch) {
-
-                        case '=' -> {
-                            Token newToken = new Token(IToken.Kind.EQUALS, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        default -> {
-                            Token newToken = new Token(IToken.Kind.ASSIGN, sourceCode.substring(startPos, pos),
-                                    tokenPosition, 1);
-                            currState = STATE.START;
-                            return newToken;
-                        }
-
-                    }
-
-                }
-                case HAVE_EX -> {
-
-                    switch (ch) {
-
-                        case '=' -> {
-                            Token newToken = new Token(IToken.Kind.NOT_EQUALS,
-                                    sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        default -> {
-                            Token newToken = new Token(IToken.Kind.BANG, sourceCode.substring(startPos, pos),
-                                    tokenPosition,
-                                    1);
-                            currState = STATE.START;
-                            return newToken;
-                        }
-
-                    }
-
-                }
-                case HAVE_MINUS -> {
-
-                    switch (ch) {
-
-                        case '>' -> {
-                            Token newToken = new Token(IToken.Kind.RARROW, sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        default -> {
-                            Token newToken = new Token(IToken.Kind.MINUS, sourceCode.substring(startPos, pos),
-                                    tokenPosition, 1);
-                            currState = STATE.START;
-                            return newToken;
-                        }
-
-                    }
-
-                }
-                case IN_STRING -> {
-
-                    switch (ch) {
-
-                        case '\\' -> {
-                            currState = STATE.HAVE_SLASH;
-                            col++;
-                            pos++;
-                        }
-                        case '"' -> {
-                            Token newToken = new Token(IToken.Kind.STRING_LIT,
-                                    sourceCode.substring(startPos, pos + 1),
-                                    tokenPosition, (pos + 1) - startPos);
-                            currState = STATE.START;
-                            col++;
-                            pos++;
-                            return newToken;
-                        }
-                        case '\n' -> {
-                            col = 0;
-                            line++;
-                            pos++;
-                        }
-                        default -> {
-                            col++;
-                            pos++;
-                        }
-
-                    }
-
-                }
-                case HAVE_SLASH -> {
-
-                    switch (ch) {
-
-                        case 'b', 't', 'n', 'f', 'r', '\\', '\'', '\"' -> {
-                            currState = STATE.IN_STRING;
-                            col++;
-                            pos++;
-                        }
-                        default -> {
-                            throw new LexicalException("Invalid escape character", tokenPosition.line(),
-                                    tokenPosition.column());
-                        }
-
+                    tempToken = possibleToken(tempToken, c);
+                    if (tempToken.getComplete()) {
+                        tokens.add(tempToken);
+                        i--;
+                        decrementLexerColumn();
                     }
 
                 }
                 case IN_COMMENT -> {
-
-                    switch (ch) {
-
-                        case '\n' -> {
-                            currState = STATE.START;
-                            line++;
-                            col = 0;
-                            pos++;
-                        }
-
-                        default -> {
-                            col++;
-                            pos++;
-                        }
-
+                    if (c == '\n') {
+                        setState(State.START);
+                        resetLexerColumn();
+                        incrementLexerLine();
                     }
+                }
+            }
 
+            // increment column if char is not a newline
+            if (inputChars.charAt(i) != '\n')
+                incrementLexerColumn();
+
+        }
+        Token finalToken = new Token();
+        finalToken.setKind(Token.Kind.EOF);
+        tokens.add(finalToken);
+    }
+
+    public Token start(char c, int line, int column) {
+
+        IToken.SourceLocation startPos = new IToken.SourceLocation(line, column); // save position of first char in
+                                                                                  // token\
+        Token token = new Token(startPos);
+        switch (c) {
+            // new line character
+            case '\n' -> {
+                incrementLexerLine();
+            }
+            // all single chars
+            case '&', ',', '/', '(', '[', '%', '|', '+', '^', ')', ']', ';', '*', '.' -> {
+                token.setKind(findKind(c));
+                token.concatText(c);
+                token.addLength();
+                token.setComplete();
+                setState(State.START);
+                return token;
+            }
+            // State with less than
+            case '<' -> {
+                setState(State.HAVE_LESS);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            // Greater than
+            case '>' -> {
+                setState(State.HAVE_GREATER);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            // Equals
+            case '=' -> {
+                setState(State.HAVE_EQ);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            // Exclamation
+            case '!' -> {
+                setState(State.HAVE_EXCLAMATION);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            // Minus
+            case '-' -> {
+                setState(State.HAVE_MINUS);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            case '0' -> {
+                setState(State.START_ZERO);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+
+            case '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
+                setState(State.IN_INT);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            case '"' -> {
+                setState(State.IN_STRING);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            case 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+                    'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
+                    'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '$' -> {
+                setState(State.IN_IDENT);
+                token.concatText(c);
+                token.addLength();
+                return token;
+            }
+            case '#' -> {
+                setState(State.IN_COMMENT);
+                return token;
+            }
+            case ' ', '\t', '\r' -> {
+                return null;
+            }
+            default -> {
+                token.concatText(c);
+                token.setKind(Token.Kind.ERROR);
+                token.setComplete();
+                token.addLength();
+                setState(State.START);
+                return token;
+            }
+
+        }
+        return null;
+    }
+
+    public Token possibleToken(Token token, char c) {
+        switch (state) {
+            case HAVE_LESS -> {
+                switch (c) {
+                    case '<' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.LANGLE);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    case '=' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.LE);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    case '-' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.LARROW);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.LT);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case HAVE_GREATER -> {
+
+                switch (c) {
+                    case '>' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.RANGLE);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    case '=' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.GE);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.GT);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case HAVE_EXCLAMATION -> {
+
+                switch (c) {
+                    case '=' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.NOT_EQUALS);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.BANG);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case HAVE_EQ -> {
+
+                switch (c) {
+                    case '=' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.EQUALS);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.ASSIGN);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case HAVE_MINUS -> {
+
+                switch (c) {
+                    case '>' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        token.setKind(IToken.Kind.RARROW);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.MINUS);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
                 }
 
             }
+            case START_ZERO -> {
+                switch (c) {
+                    case '.' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        setState(State.HAVE_DOT);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.INT_LIT);
+                        token.setComplete();
+                        try {
+                            token.setIntValue(Integer.parseInt(token.getText()));
+                        } catch (NumberFormatException e) {
+                            token.setKind(IToken.Kind.ERROR);
+                        }
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case HAVE_DOT -> {
+                switch (c) {
+                    case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        setState(State.IN_FLOAT);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.ERROR);
+                        token.setComplete();
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case IN_FLOAT -> {
+                switch (c) {
+                    case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.FLOAT_LIT);
+                        token.setComplete();
+                        try {
+                            token.setFloatValue(Float.parseFloat(token.getText()));
+                        } catch (NumberFormatException e) {
+                            token.setKind(IToken.Kind.ERROR);
+                        }
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case IN_INT -> {
+                switch (c) {
+                    case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        return token;
+                    }
+                    case '.' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        setState(State.HAVE_DOT);
+                        return token;
+                    }
+                    default -> {
+                        token.setKind(IToken.Kind.INT_LIT);
+                        token.setComplete();
 
+                        token.setIntValue(Integer.parseInt(token.getText()));
+                        setState(State.START);
+                        return token;
+                    }
+                }
+            }
+            case IN_STRING -> {
+
+                switch (c) {
+                    case '"' -> {
+                        token.setKind(IToken.Kind.STRING_LIT);
+                        token.concatText(c);
+                        token.setComplete();
+                        String stringValue = token.getText().substring(1, token.getText().length() - 1);
+                        token.setStringValue(stringValue);
+                        setState(State.START);
+                        return token;
+                    }
+                    default -> {
+                        token.concatText(c);
+                        token.addLength();
+                        return token;
+                    }
+                }
+            }
+            case IN_IDENT -> {
+                switch (c) {
+                    case 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
+                            't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+                            'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '$', '0',
+                            '1', '2', '3', '4', '5', '6', '7', '8', '9' -> {
+                        token.concatText(c);
+                        token.addLength();
+                        return token;
+                    }
+                    default -> {
+                        if (reservedMap.containsKey(token.getText())) {
+                            token.setKind(reservedMap.get(token.getText()));
+                            if (token.getKind() == Token.Kind.BOOLEAN_LIT) {
+                                token.setBooleanValue(token.getText().equals("true"));
+                            }
+                            token.setComplete();
+                            setState(State.START);
+                            return token;
+                        } else {
+                            token.setKind(IToken.Kind.IDENT);
+                            token.setComplete();
+                            setState(State.START);
+                            return token;
+                        }
+                    }
+                }
+
+            }
+            default -> {
+                return null;
+            }
         }
 
     }
 
-    private void HashMap() {
-        rsrvd.put("true", IToken.Kind.BOOLEAN_LIT);
-        rsrvd.put("false", IToken.Kind.BOOLEAN_LIT);
-        rsrvd.put("BLACK", IToken.Kind.COLOR_CONST);
-        rsrvd.put("BLUE", IToken.Kind.COLOR_CONST);
-        rsrvd.put("CYAN", IToken.Kind.COLOR_CONST);
-        rsrvd.put("DARK_GRAY", IToken.Kind.COLOR_CONST);
-        rsrvd.put("DARK_GREY", IToken.Kind.COLOR_CONST);
-        rsrvd.put("GRAY", IToken.Kind.COLOR_CONST);
-        rsrvd.put("GREY", IToken.Kind.COLOR_CONST);
-        rsrvd.put("GREEN", IToken.Kind.COLOR_CONST);
-        rsrvd.put("LIGHT_GRAY", IToken.Kind.COLOR_CONST);
-        rsrvd.put("LIGHT_GREY", IToken.Kind.COLOR_CONST);
-        rsrvd.put("MAGENTA", IToken.Kind.COLOR_CONST);
-        rsrvd.put("ORANGE", IToken.Kind.COLOR_CONST);
-        rsrvd.put("PINK", IToken.Kind.COLOR_CONST);
-        rsrvd.put("RED", IToken.Kind.COLOR_CONST);
-        rsrvd.put("WHITE", IToken.Kind.COLOR_CONST);
-        rsrvd.put("YELLOW", IToken.Kind.COLOR_CONST);
-        rsrvd.put("if", IToken.Kind.KW_IF);
-        rsrvd.put("fi", IToken.Kind.KW_FI);
-        rsrvd.put("else", IToken.Kind.KW_ELSE);
-        rsrvd.put("write", IToken.Kind.KW_WRITE);
-        rsrvd.put("console", IToken.Kind.KW_CONSOLE);
-        rsrvd.put("int", IToken.Kind.TYPE);
-        rsrvd.put("float", IToken.Kind.TYPE);
-        rsrvd.put("string", IToken.Kind.TYPE);
-        rsrvd.put("boolean", IToken.Kind.TYPE);
-        rsrvd.put("color", IToken.Kind.TYPE);
-        rsrvd.put("image", IToken.Kind.TYPE);
-        rsrvd.put("getRed", IToken.Kind.COLOR_OP);
-        rsrvd.put("getGreen", IToken.Kind.COLOR_OP);
-        rsrvd.put("getBlue", IToken.Kind.COLOR_OP);
-        rsrvd.put("getWidth", IToken.Kind.IMAGE_OP);
-        rsrvd.put("getHeight", IToken.Kind.IMAGE_OP);
-        rsrvd.put("void", IToken.Kind.KW_VOID);
+    public Token.Kind findKind(char c) {
+        Token.Kind kind;
+        switch (c) {
+            case '&' -> {
+                kind = Token.Kind.AND;
+            }
+            case ',' -> {
+                kind = Token.Kind.COMMA;
+            }
+            case '/' -> {
+                kind = Token.Kind.DIV;
+            }
+            case '(' -> {
+                kind = Token.Kind.LPAREN;
+            }
+            case '[' -> {
+                kind = Token.Kind.LSQUARE;
+            }
+            case '%' -> {
+                kind = Token.Kind.MOD;
+            }
+            case '|' -> {
+                kind = Token.Kind.OR;
+            }
+            case '+' -> {
+                kind = Token.Kind.PLUS;
+            }
+            case '^' -> {
+                kind = Token.Kind.RETURN;
+            }
+            case ')' -> {
+                kind = Token.Kind.RPAREN;
+            }
+            case ']' -> {
+                kind = Token.Kind.RSQUARE;
+            }
+            case ';' -> {
+                kind = Token.Kind.SEMI;
+            }
+            case '*' -> {
+                kind = Token.Kind.TIMES;
+            }
+            case '.' -> {
+                kind = Token.Kind.ERROR;
+            }
+
+            default -> {
+                kind = null;
+            }
+        }
+
+        return kind;
 
     }
 
+    public void buildMap() {
+        HashMap<String, Token.Kind> map = new HashMap<>();
+        map.put("BLACK", Token.Kind.COLOR_CONST);
+        map.put("BLUE", Token.Kind.COLOR_CONST);
+        map.put("CYAN", Token.Kind.COLOR_CONST);
+        map.put("DARK_GRAY", Token.Kind.COLOR_CONST);
+        map.put("GREEN", Token.Kind.COLOR_CONST);
+        map.put("GRAY", Token.Kind.COLOR_CONST);
+        map.put("LIGHT_GRAY", Token.Kind.COLOR_CONST);
+        map.put("MAGENTA", Token.Kind.COLOR_CONST);
+        map.put("ORANGE", Token.Kind.COLOR_CONST);
+        map.put("PINK", Token.Kind.COLOR_CONST);
+        map.put("RED", Token.Kind.COLOR_CONST);
+        map.put("WHITE", Token.Kind.COLOR_CONST);
+        map.put("YELLOW", Token.Kind.COLOR_CONST);
+        map.put("string", Token.Kind.TYPE);
+        map.put("int", Token.Kind.TYPE);
+        map.put("boolean", Token.Kind.TYPE);
+        map.put("float", Token.Kind.TYPE);
+        map.put("color", Token.Kind.TYPE);
+        map.put("image", Token.Kind.TYPE);
+        map.put("void", Token.Kind.KW_VOID);
+        map.put("getWidth", Token.Kind.IMAGE_OP);
+        map.put("getHeight", Token.Kind.IMAGE_OP);
+        map.put("getRed", Token.Kind.COLOR_OP);
+        map.put("getGreen", Token.Kind.COLOR_OP);
+        map.put("getBlue", Token.Kind.COLOR_OP);
+        map.put("true", Token.Kind.BOOLEAN_LIT);
+        map.put("false", Token.Kind.BOOLEAN_LIT);
+        map.put("if", Token.Kind.KW_IF);
+        map.put("else", Token.Kind.KW_ELSE);
+        map.put("fi", Token.Kind.KW_FI);
+        map.put("write", Token.Kind.KW_WRITE);
+        map.put("console", Token.Kind.KW_CONSOLE);
+        this.reservedMap = map;
+
+    }
+
+    @Override
+    public IToken next() throws LexicalException {
+        currToken++;
+        if (tokens.get(currToken).getKind() == Token.Kind.ERROR)
+            throw new LexicalException("Error - Invalid Token: " + tokens.get(currToken).getSourceLocation());
+        // if (tokens.get(currToken).getKind() == Token.Kind.EOF && getState() ==
+        // State.IN_STRING){
+        // throw new LexicalException("Incomplete string");
+        // }
+        return tokens.get(currToken);
+    }
+
+    @Override
+    public IToken peek() throws LexicalException {
+        if (tokens.get(currToken + 1).getKind() == Token.Kind.ERROR)
+            throw new LexicalException("Error - Invalid Token: " + tokens.get(currToken + 1).getSourceLocation());
+        return tokens.get(currToken + 1);
+    }
 }
