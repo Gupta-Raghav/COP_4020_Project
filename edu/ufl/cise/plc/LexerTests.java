@@ -1,15 +1,11 @@
-package edu.ufl.cise.plc.test;
+package edu.ufl.cise.plc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
-import edu.ufl.cise.plc.CompilerComponentFactory;
-import edu.ufl.cise.plc.ILexer;
-import edu.ufl.cise.plc.IToken;
 import edu.ufl.cise.plc.IToken.Kind;
-import edu.ufl.cise.plc.LexicalException;
 
 public class LexerTests {
 

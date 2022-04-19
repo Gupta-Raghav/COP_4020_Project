@@ -7,9 +7,14 @@ import java.util.Locale;
 public class CodeGenVisitor implements ASTVisitor {
 
     private String packageName;
+    public boolean github;
 
     public CodeGenVisitor(String packageName) {
         this.packageName = packageName;
+    }
+
+    public static void main(String[] args) {
+
     }
 
     public String boxed(Types.Type type) {
@@ -94,8 +99,10 @@ public class CodeGenVisitor implements ASTVisitor {
     @Override
     public Object visitUnaryExpr(UnaryExpr unaryExpression, Object arg) throws Exception {
         StringBuilder sb = (StringBuilder) arg;
-        sb.append(unaryExpression.getOp());
+        sb.append(" (");
+        sb.append(unaryExpression.getOp().getText());
         unaryExpression.getExpr().visit(this, sb);
+        sb.append(") ");
         return sb;
     }
 
@@ -107,7 +114,6 @@ public class CodeGenVisitor implements ASTVisitor {
         if (type == Types.Type.IMAGE) {
             throw new UnsupportedOperationException("Not implemented yet");
         } else {
-            sb.append("(").append(lowerCaseString(type)).append(")");
             sb.append("(");
             binaryExpr.getLeft().visit(this, sb);
             sb.append(binaryExpr.getOp().getText());
@@ -133,11 +139,13 @@ public class CodeGenVisitor implements ASTVisitor {
     @Override
     public Object visitConditionalExpr(ConditionalExpr conditionalExpr, Object arg) throws Exception {
         StringBuilder sb = (StringBuilder) arg;
+        sb.append(" (");
         conditionalExpr.getCondition().visit(this, sb);
         sb.append("?");
         conditionalExpr.getTrueCase().visit(this, sb);
         sb.append(":");
         conditionalExpr.getFalseCase().visit(this, sb);
+        sb.append(") ");
         return sb;
     }
 
@@ -156,6 +164,11 @@ public class CodeGenVisitor implements ASTVisitor {
         StringBuilder sb = (StringBuilder) arg;
         sb.append(assignmentStatement.getName());
         sb.append("=");
+        if (assignmentStatement.getTargetDec().getType() != assignmentStatement.getExpr().getType()) {
+            sb.append(" (");
+            sb.append(lowerCaseString(assignmentStatement.getTargetDec().getType()));
+            sb.append(") ");
+        }
         assignmentStatement.getExpr().visit(this, sb);
         return sb;
     }
@@ -238,6 +251,11 @@ public class CodeGenVisitor implements ASTVisitor {
         declaration.getNameDef().visit(this, sb);
         if (declaration.getExpr() != null) {
             sb.append("=");
+            if (declaration.getType() != declaration.getExpr().getType()) {
+                sb.append(" (");
+                sb.append(lowerCaseString(declaration.getType()));
+                sb.append(") ");
+            }
             declaration.getExpr().visit(this, sb);
         }
         return sb;
@@ -248,5 +266,3 @@ public class CodeGenVisitor implements ASTVisitor {
         throw new UnsupportedOperationException("Not implemented yet");
     }
 }
-
-

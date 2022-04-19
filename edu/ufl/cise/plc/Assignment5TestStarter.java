@@ -1,4 +1,4 @@
-package edu.ufl.cise.plc.test;
+package edu.ufl.cise.plc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -9,12 +9,6 @@ import java.io.IOException;
 
 import org.junit.jupiter.api.Test;
 
-import edu.ufl.cise.plc.CodeGenVisitor;
-import edu.ufl.cise.plc.CompilerComponentFactory;
-import edu.ufl.cise.plc.IParser;
-//import edu.ufl.cise.plc.ImageResources;
-import edu.ufl.cise.plc.TypeCheckException;
-import edu.ufl.cise.plc.TypeCheckVisitor;
 import edu.ufl.cise.plc.ast.ASTNode;
 import edu.ufl.cise.plc.ast.ASTVisitor;
 import edu.ufl.cise.plc.ast.Program;
