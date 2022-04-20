@@ -53,12 +53,6 @@ class Assignment6StarterTest {
 		return image;
 	}
 
-	/**
-	 * This is the same as show(BufferedImage) except that the image is placed in a
-	 * different location:
-	 * [0,0] is in center of screen rather than the upper left corner.
-	 */
-
 	private BufferedImage showRef(BufferedImage image) {
 		if (VERBOSE) {
 			ConsoleIO.displayReferenceImageOnScreen(image);
@@ -76,12 +70,6 @@ class Assignment6StarterTest {
 
 	private void pauseImageDisplay() throws IOException {
 		if (PAUSE) {
-			/*
-			 * If you would like Junit test to pause for input, uncomment The next two lines
-			 * and comment the try-catch block.
-			 */
-			// System.out.print("Enter any character to terminate: ");
-			// System.in.read();
 			try {
 				Thread.sleep(MILLIS);
 			} catch (InterruptedException e) {
@@ -132,8 +120,6 @@ class Assignment6StarterTest {
 		return (new PLCLangExec(packageName, VERBOSE)).exec(input, null);
 	}
 
-	// need separate method to check floats due to DELTA. Note in simple cases, just
-	// use normal check.
 	void checkFloatResult(String input, float expectedResult) throws Exception {
 		checkFloatResult(input, null, expectedResult);
 	}
@@ -170,17 +156,15 @@ class Assignment6StarterTest {
 				            ^ a;
 				""";
 		int size = 500;
-		// create reference image
 		BufferedImage refImage = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
 		for (int x = 0; x < size; x++) {
 			for (int y = 0; y < size; y++) {
 				refImage.setRGB(x, y, (new ColorTuple(x - y, 0, y - x)).pack());
 			}
 		}
-		// run PLCLang program
+
 		Object[] params = { size };
 		show(check(input, params, refImage));
-		// If you don't want to compare with ref image use show(exec(input,params));
 	}
 
 	@Test
@@ -226,7 +210,6 @@ class Assignment6StarterTest {
 			}
 		Object[] params = { url };
 		ConsoleIO.displayReferenceImageOnScreen(inputImage);
-		// this image should be the same size, but darker than inputImage
 		show(check(input, params, refImage));
 	}
 
