@@ -1,435 +1,1000 @@
 package edu.ufl.cise.plc;
 
-import edu.ufl.cise.plc.ast.*;
+import java.util.*;
 
-import java.util.Locale;
+import edu.ufl.cise.plc.IToken.Kind;
+import edu.ufl.cise.plc.ast.ASTNode;
+import edu.ufl.cise.plc.ast.ASTVisitor;
+import edu.ufl.cise.plc.ast.AssignmentStatement;
+import edu.ufl.cise.plc.ast.BinaryExpr;
+import edu.ufl.cise.plc.ast.BooleanLitExpr;
+import edu.ufl.cise.plc.ast.ColorConstExpr;
+import edu.ufl.cise.plc.ast.ColorExpr;
+import edu.ufl.cise.plc.ast.ConditionalExpr;
+import edu.ufl.cise.plc.ast.ConsoleExpr;
+import edu.ufl.cise.plc.ast.Declaration;
+import edu.ufl.cise.plc.ast.Dimension;
+import edu.ufl.cise.plc.ast.Expr;
+import edu.ufl.cise.plc.ast.FloatLitExpr;
+import edu.ufl.cise.plc.ast.IdentExpr;
+import edu.ufl.cise.plc.ast.IntLitExpr;
+import edu.ufl.cise.plc.ast.NameDef;
+import edu.ufl.cise.plc.ast.NameDefWithDim;
+import edu.ufl.cise.plc.ast.PixelSelector;
+import edu.ufl.cise.plc.ast.Program;
+import edu.ufl.cise.plc.ast.ReadStatement;
+import edu.ufl.cise.plc.ast.ReturnStatement;
+import edu.ufl.cise.plc.ast.StringLitExpr;
+import edu.ufl.cise.plc.ast.Types.Type;
+import edu.ufl.cise.plc.ast.UnaryExpr;
+import edu.ufl.cise.plc.ast.UnaryExprPostfix;
+import edu.ufl.cise.plc.ast.VarDeclaration;
+import edu.ufl.cise.plc.ast.WriteStatement;
+import edu.ufl.cise.plc.runtime.ConsoleIO;
+// import jdk.incubator.foreign.FunctionDescriptor;
 
-import java.awt.image.BufferedImage;
-import java.io.File;
-
-import edu.ufl.cise.plc.runtime.FileURLIO;
+import static edu.ufl.cise.plc.ast.Types.Type.*;
 
 public class CodeGenVisitor implements ASTVisitor {
-
-    private String packageName;
+    String packageName = "";
+    Set<String> Imports = new HashSet<String>();
+    String file = "";
 
     public CodeGenVisitor(String packageName) {
         this.packageName = packageName;
-    }
-
-    public static void main(String[] args) {
 
     }
 
-    public String boxed(Types.Type type) {
-        if (type == Types.Type.INT)
-            return "Integer";
-        if (type == Types.Type.FLOAT)
-            return "Float";
-        if (type == Types.Type.BOOLEAN)
-            return "Boolean";
-        if (type == Types.Type.STRING)
-            return "String";
-        else
-            return null;
-    }
+    public Object genTypeConversion(Type coerce, Object arg) {
+        String type = "";
+        if (coerce == INT) {
+            type = "int";
+        } else if (coerce == FLOAT) {
+            type = "float";
+        } else if (coerce == STRING) {
+            type = "String";
+        } else if (coerce == BOOLEAN) {
+            type = "boolean";
+        }
 
-    public String lowerCaseString(Types.Type type) {
-        if (type == Types.Type.IMAGE)
-            return "BufferedImage";
-        if (type == Types.Type.BOOLEAN)
-            return "boolean";
-        if (type == Types.Type.COLOR)
-            return "ColorTuple";
-        if (type == Types.Type.INT)
-            return "int";
-        if (type == Types.Type.VOID)
-            return "void";
-        if (type == Types.Type.STRING)
-            return "String";
-        else
-            return type.toString().toLowerCase();
-    }
+        else {
+            return arg;
+        }
 
-    public static String opToOpText(String op) {
-        return switch (op) {
-            case "+" -> "PLUS";
-            case "-" -> "MINUS";
-            case "*" -> "TIMES";
-            case "/" -> "DIV";
-            case "%" -> "MOD";
-
-            default -> throw new IllegalArgumentException("Unexpected type value: " + op);
-        };
+        arg = "(" + type + ")" + arg;
+        return arg;
     }
 
     @Override
     public Object visitBooleanLitExpr(BooleanLitExpr booleanLitExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append(booleanLitExpr.getValue());
-        return sb;
+        String kind = "";
+
+        if (booleanLitExpr.getValue() == true) {
+            kind = "true";
+        } else if (booleanLitExpr.getValue() == false) {
+            kind = "false";
+        } else {
+            throw new IllegalArgumentException("Neither true or false.");
+        }
+
+        arg += kind;
+
+        return arg;
+
     }
 
     @Override
     public Object visitStringLitExpr(StringLitExpr stringLitExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append("\"\"\"");
-        sb.append("\n");
-        sb.append(stringLitExpr.getValue());
-        sb.append("\"\"\"");
-        return sb;
+        String argTemp = "\"\"\"\n";
+        argTemp = argTemp + stringLitExpr.getValue();
+        argTemp += "\"\"\"";
+        arg += (String) argTemp;
+
+        return arg;
+
     }
 
     @Override
     public Object visitIntLitExpr(IntLitExpr intLitExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        Types.Type type = (intLitExpr.getCoerceTo() != null && intLitExpr.getCoerceTo() != Types.Type.INT)
-                ? intLitExpr.getCoerceTo()
-                : intLitExpr.getType();
-        if (intLitExpr.getCoerceTo() != null && intLitExpr.getCoerceTo() != Types.Type.INT)
-            sb.append("(").append(lowerCaseString(type)).append(") ");
-        sb.append(intLitExpr.getValue());
-        return sb;
+        Object argTemp = String.valueOf(intLitExpr.getValue());
+        Type type = intLitExpr.getCoerceTo() != null ? intLitExpr.getCoerceTo() : intLitExpr.getType();
+
+        if (intLitExpr.getType() != type) {
+            argTemp = genTypeConversion(type, argTemp);
+        }
+        arg += (String) argTemp;
+        return arg;
     }
 
     @Override
     public Object visitFloatLitExpr(FloatLitExpr floatLitExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        Types.Type type = (floatLitExpr.getCoerceTo() != null && floatLitExpr.getCoerceTo() != Types.Type.FLOAT)
-                ? floatLitExpr.getCoerceTo()
-                : floatLitExpr.getType();
-        if (floatLitExpr.getCoerceTo() != null && floatLitExpr.getCoerceTo() != Types.Type.FLOAT)
-            sb.append("(").append(lowerCaseString(type)).append(") ");
-        sb.append(floatLitExpr.getValue());
-        sb.append("f");
-        return sb;
-    }
+        Object argTemp = (Float.toString(floatLitExpr.getValue()));
+        argTemp += "f";
 
-    @Override
-    public Object visitColorConstExpr(ColorConstExpr colorConstExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        String col = colorConstExpr.getText();
+        Type type = floatLitExpr.getCoerceTo() != null ? floatLitExpr.getCoerceTo() : floatLitExpr.getType();
 
-        sb.append("ColorTuple.unpack(" + "Color." + col + ".getRGB");
-        return sb;
-        // throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public Object visitConsoleExpr(ConsoleExpr consoleExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append("(").append((boxed(consoleExpr.getCoerceTo()))).append(")").append(" "); // (Integer)
-        sb.append("ConsoleIO.readValueFromConsole"); // ConsoleIO.readValueFromConsole
-        sb.append("(").append("\"").append(lowerCaseString(consoleExpr.getCoerceTo()).toUpperCase()).append("\"")
-                .append(",").append(" "); // (“INT”,
-        sb.append("\"").append("Enter ").append(boxed(consoleExpr.getCoerceTo()).toLowerCase()); // integer:
-        sb.append(":").append("\"").append(")").append(";"); // ”);
-
-        return sb;
-    }
-
-    @Override
-    public Object visitColorExpr(ColorExpr colorExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-
-        String red = colorExpr.getRed().getText();
-        String blue = colorExpr.getBlue().getText();
-        String green = colorExpr.getGreen().getText();
-
-        sb.append("new ColorTuple(" + red + ", " + green + ", " + blue + ")");
-
-        return sb;
-        // throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public Object visitUnaryExpr(UnaryExpr unaryExpression, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append(" (");
-        sb.append(unaryExpression.getOp().getText());
-        unaryExpression.getExpr().visit(this, sb);
-        sb.append(") ");
-        return sb;
-    }
-
-    @Override
-    public Object visitBinaryExpr(BinaryExpr binaryExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        Expr leftExpr = binaryExpr.getLeft();
-        Expr rightExpr = binaryExpr.getRight();
-
-        Types.Type type = binaryExpr.getType();
-        Types.Type leftType = leftExpr.getCoerceTo() == null ? leftExpr.getType() : leftExpr.getCoerceTo();
-        Types.Type rightType = rightExpr.getCoerceTo() == null ? rightExpr.getType() : rightExpr.getCoerceTo();
-
-        IToken op = binaryExpr.getOp();
-
-        if (type == Types.Type.IMAGE) {
-            sb.append("(");
-            sb.append("ImageOps.binaryImageImageOp(ImageOps.OP." + opToOpText(op.getText()) + ", ");
-            leftExpr.visit(this, sb);
-            sb.append(",").append(" ");
-            rightExpr.visit(this, sb);
-            sb.append(")");
-            sb.append(")");
-            // throw new UnsupportedOperationException("Not implemented yet");
-
-        } else if (type == Types.Type.COLOR) {
-            sb.append("(");
-            sb.append("ImageOps.binaryTupleOp(ImageOps.OP." + opToOpText(op.getText()) + ", ");
-            leftExpr.visit(this, sb);
-            sb.append(",").append(" ");
-            rightExpr.visit(this, sb);
-            sb.append(")");
-            sb.append(")");
-        } else if ((binaryExpr.getLeft().getType() == Types.Type.IMAGE
-                && binaryExpr.getRight().getType() == Types.Type.COLOR)
-                && (binaryExpr.getRight().getType() == Types.Type.IMAGE
-                        && binaryExpr.getLeft().getType() == Types.Type.COLOR)) {
-            // What is an image operation? How do I apply color to it?? See binaryExpr
-            // description. Does it mean pixels?
-        } else if ((binaryExpr.getLeft().getType() == Types.Type.IMAGE
-                && binaryExpr.getRight().getType() == Types.Type.INT)
-                && (binaryExpr.getRight().getType() == Types.Type.IMAGE
-                        && binaryExpr.getLeft().getType() == Types.Type.INT)) {
-            // Use the colorTuple constructor with 3 params
-        } else {
-            sb.append("(");
-            binaryExpr.getLeft().visit(this, sb);
-            sb.append(binaryExpr.getOp().getText());
-            binaryExpr.getRight().visit(this, sb);
-            sb.append(")");
+        if (floatLitExpr.getType() != type) {
+            argTemp = genTypeConversion(type, argTemp);
         }
-
-        return sb;
+        arg += (String) argTemp;
+        return arg;
     }
 
     @Override
     public Object visitIdentExpr(IdentExpr identExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        Types.Type type = identExpr.getCoerceTo() != null ? identExpr.getCoerceTo() : identExpr.getType();
-        // add cast type if applicable
-        if (identExpr.getCoerceTo() != null && identExpr.getCoerceTo() != type) {
-            sb.append("(").append(lowerCaseString(identExpr.getCoerceTo())).append(")");
+        if (identExpr.getCoerceTo() == IMAGE) {
+            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            arg += "ImageOps.clone(";
+        } else if (identExpr.getCoerceTo() == INT && identExpr.getType() == COLOR) {
+            arg += (identExpr.getText());
+            arg += ".pack()";
+            return arg;
         }
-        sb.append(identExpr.getText());
-        return sb;
+
+        else if (identExpr.getCoerceTo() == COLOR && identExpr.getType() == INT) {
+            arg += "new ColorTuple(";
+            arg += identExpr.getText();
+            arg += ")";
+            return arg;
+        }
+        arg += (identExpr.getText());
+
+        return arg;
     }
 
     @Override
     public Object visitConditionalExpr(ConditionalExpr conditionalExpr, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append(" (");
-        conditionalExpr.getCondition().visit(this, sb);
-        sb.append("?");
-        conditionalExpr.getTrueCase().visit(this, sb);
-        sb.append(":");
-        conditionalExpr.getFalseCase().visit(this, sb);
-        sb.append(") ");
-        return sb;
-    }
+        Expr condition = conditionalExpr.getCondition();
+        Expr trueCase = conditionalExpr.getTrueCase();
+        Expr falseCase = conditionalExpr.getFalseCase();
 
-    @Override
-    public Object visitDimension(Dimension dimension, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append(" (");
-        dimension.getWidth().visit(this, sb);
-        sb.append("str");
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
+        arg += "(";
+        arg += "(";
+        arg = condition.visit(this, arg);
+        arg += ")";
+        arg += (" ? ");
+        arg = trueCase.visit(this, arg);
+        arg += (" : ");
+        arg = falseCase.visit(this, arg);
+        arg += ")";
 
-    @Override
-    public Object visitPixelSelector(PixelSelector pixelSelector, Object arg) throws Exception {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public Object visitAssignmentStatement(AssignmentStatement assignmentStatement, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append(assignmentStatement.getName());
-        sb.append("=");
-        if (assignmentStatement.getTargetDec().getType() != assignmentStatement.getExpr().getType()) {
-            sb.append(" (");
-            sb.append(lowerCaseString(assignmentStatement.getTargetDec().getType()));
-            sb.append(") ");
-        }
-        if (assignmentStatement.getTargetDec().getType() == Types.Type.IMAGE &&
-                assignmentStatement.getTargetDec().getDim() != null) {
-            PixelSelector selector = assignmentStatement.getSelector();
-
-            if (selector != null) {
-                String name = assignmentStatement.getName();
-                String x = selector.getX().getText();
-                String y = selector.getY().getText();
-                sb.append("for(int " + x + "= 0;" + x + " < " + name + ".getWidth();" + x + "++)").append("\n")
-                        .append("\t").append("\t").append(
-                                "for(int " + y + "= 0;" + y + " < " + name + ".getWidth();" + y + "++)")
-                        .append("\n").append("\t").append("\t").append("\t").append(
-                                "ImageOps.setColor(" + name + "," + x + "," + y + ", ");
-
-                if (assignmentStatement.getExpr().getType() == Types.Type.COLOR) {
-                    sb.append("ImageOps.setColor(" + name + "," + x + "," + y + ", ");
-                    assignmentStatement.getExpr().visit(this, arg);
-                    sb.append(")").append(";");
-                } else if (assignmentStatement.getExpr().getType() == Types.Type.INT) {
-                    sb.append("ImageOps.setColor(" + name + "," + x + "," + y
-                            + ", ColorTuple.unpack(ColorTuple.truncate(");
-                    assignmentStatement.getExpr().visit(this, arg);
-                    sb.append(")").append(")").append(")").append(";").append("\n");
-                }
-            } else {
-                String name = assignmentStatement.getName();
-                String x = "x";
-                String y = "y";
-                String val = assignmentStatement.getExpr().getText();
-
-                sb.append("for(int " + x + "= 0;" + x + " < " + name + ".getWidth();" + x + "++)").append("\n")
-                        .append("\t").append("\t").append(
-                                "for(int " + y + "= 0;" + y + " < " + name + ".getWidth();" + y + "++)")
-                        .append("\n").append("\t").append("\t").append("\t");
-                if (assignmentStatement.getExpr().getType() == Types.Type.COLOR) {
-                    sb.append("ImageOps.setColor(" + name + "," + x + "," + y + ", Color." + val + ".getRGB()");
-                    sb.append(")");
-                } else {
-                    sb.append("ImageOps.setColor(" + name + "," + x + "," + y + ", new ColorTuple(" + val + ", " + val
-                            + ", " + val);
-                    sb.append(")").append(")");
-                }
-
-                sb.append(";");
-                sb.append(";").append("\n");
-            }
-        } else if (assignmentStatement.getTargetDec().getType() == Types.Type.IMAGE &&
-                assignmentStatement.getTargetDec().getDim() == null) {
-            PixelSelector selector = assignmentStatement.getSelector();
-
-            if (selector != null) {
-                String name = assignmentStatement.getName();
-                String x = selector.getX().getText();
-                String y = selector.getY().getText();
-                sb.append("for(int " + x + "= 0;" + x + " < " + name + ".getWidth();" + x + "++)").append("\n")
-                        .append("\t").append("\t").append(
-                                "for(int " + y + "= 0;" + y + " < " + name + ".getWidth();" + y + "++)");
-            }
-        } else {
-            sb.append(assignmentStatement.getName()).append("=");
-
-            Expr expr = assignmentStatement.getExpr();
-            expr.visit(this, sb);
-
-            sb.append(";");
-        }
-
-        return sb;
-    }
-
-    @Override
-    public Object visitWriteStatement(WriteStatement writeStatement, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append("ConsoleIO.console.println(");
-        sb.append(writeStatement.getSource().getText()).append(")");
-        return sb;
-    }
-
-    @Override
-    public Object visitReadStatement(ReadStatement readStatement, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        sb.append(readStatement.getName()).append("=");
-        // if reading from console then append (object version of type)
-        sb.append(" (").append(boxed(readStatement.getTargetDec().getType())).append(") ");
-        readStatement.getSource().visit(this, sb);
-        // if reading from console
-        Types.Type targetType = readStatement.getTargetDec().getType();
-        sb.append(targetType).append("\",");
-        sb.append("\"Enter ").append(lowerCaseString(targetType)).append(":\")");
-        return sb;
+        return arg;
     }
 
     @Override
     public Object visitProgram(Program program, Object arg) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        String typeLowerCase = lowerCaseString(program.getReturnType());
-        sb.append("package ").append(packageName).append(";\n");
-        sb.append("import java.awt.image.BufferedImage;\n");
-        sb.append("import java.awt.Color;\n");
-        sb.append("import edu.ufl.cise.plc.runtime.*; \n");
-        sb.append("public class ").append(program.getName()).append("{\n");
-        sb.append("public static ").append(typeLowerCase).append(" apply(");
-        // append parameters
-        for (int i = 0; i < program.getParams().size(); i++) {
-            program.getParams().get(i).visit(this, sb);
-            if (i != program.getParams().size() - 1)
-                sb.append(", ");
-        }
-        sb.append("){\n");
-        // append declarations and statements
-        for (int i = 0; i < program.getDecsAndStatements().size(); i++) {
-            sb.append("\t");
-            program.getDecsAndStatements().get(i).visit(this, sb);
-            sb.append(";");
-            if (i != program.getDecsAndStatements().size() - 1)
-                sb.append("\n");
-        }
-        sb.append("\n\t}\n}");
+        arg = "";
+        arg = arg + "public class " + program.getName() + "{" + "\n";
+        arg = arg + "    " + "public static ";
 
-        return sb.toString();
+        String Type = "";
+
+        if (program.getReturnType() == VOID) {
+            Type = "void";
+        } else if (program.getReturnType() == INT) {
+            Type = "int";
+        } else if (program.getReturnType() == FLOAT) {
+            Type = "float";
+        } else if (program.getReturnType() == BOOLEAN) {
+            Type = "boolean";
+        } else if (program.getReturnType() == STRING) {
+            Type = "String";
+        } else if (program.getReturnType() == COLOR) {
+            Type = "ColorTuple";
+        } else if (program.getReturnType() == IMAGE) {
+            Type = "BufferedImage";
+        } else {
+            throw new IllegalArgumentException("Compiler bug Unexpected value: " + program.getReturnType());
+        }
+
+        arg = arg + Type + " apply (";
+        for (int i = 0; i < program.getParams().size(); i++) {
+            NameDef nameDef = program.getParams().get(i);
+            arg = nameDef.visit(this, arg);
+            if (i != program.getParams().size() - 1) {
+                arg = arg + ", ";
+
+            }
+
+        }
+
+        arg = arg + ")" + "{" + "\n" + "        ";
+
+        for (int i = 0; i < program.getDecsAndStatements().size(); i++) {
+            ASTNode stat = program.getDecsAndStatements().get(i);
+            arg = (String) stat.visit(this, arg);
+
+            arg += "\n";
+
+            if (i != program.getDecsAndStatements().size() - 1) {
+                arg += ("        ");
+            }
+
+        }
+
+        arg = arg + "    " + "}" + "\n" + "}";
+
+        Object arg3 = "package " + packageName + ";" + "\n";
+
+        Iterator<String> itr = Imports.iterator();
+
+        while (itr.hasNext()) {
+            arg3 += itr.next();
+        }
+
+        arg = arg3 + "\n" + arg;
+
+        return arg;
+
     }
 
     @Override
     public Object visitNameDef(NameDef nameDef, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        String typeLowerCase = lowerCaseString(nameDef.getType());
-        sb.append(typeLowerCase).append(" ").append(nameDef.getName());
-        return sb;
-    }
+        String Type = "";
+        if (nameDef.getType() == INT) {
+            Type = "int";
+        } else if (nameDef.getType() == FLOAT) {
+            Type = "float";
+        } else if (nameDef.getType() == BOOLEAN) {
+            Type = "boolean";
+        } else if (nameDef.getType() == STRING) {
+            Type = "String";
+        } else if (nameDef.getType() == IMAGE) {
+            Type = "BufferedImage";
 
-    @Override
-    public Object visitNameDefWithDim(NameDefWithDim nameDefWithDim, Object arg) throws Exception {
-        // if getDim != null append readImage
-        throw new UnsupportedOperationException("Not implemented yet");
+        } else if (nameDef.getType() == COLOR) {
+            Type = "ColorTuple";
+        } else {
+            throw new IllegalArgumentException("Compiler bug Unexpected value: " + nameDef.getType());
+        }
+        arg += (Type);
+        arg += (" ");
+        arg += (nameDef.getName());
+        return arg;
     }
 
     @Override
     public Object visitReturnStatement(ReturnStatement returnStatement, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
         Expr expr = returnStatement.getExpr();
-        sb.append("return ");
-        expr.visit(this, sb);
-        return sb;
+
+        arg += ("return ");
+        arg = expr.visit(this, arg);
+        arg = arg + ";\n";
+        return arg;
     }
 
     @Override
     public Object visitVarDeclaration(VarDeclaration declaration, Object arg) throws Exception {
-        StringBuilder sb = (StringBuilder) arg;
-        declaration.getNameDef().visit(this, sb);
-        if (declaration.getExpr() != null) {
-            sb.append("=");
-            if (declaration.getType() != declaration.getExpr().getType()) {
-                sb.append(" (");
-                sb.append(lowerCaseString(declaration.getType()));
-                sb.append(") ");
-            }
-            declaration.getExpr().visit(this, sb);
-        }
-        if (declaration.getType() == Types.Type.IMAGE) {
-            if (declaration.getDim() != null && declaration.getExpr() != null) {
-                sb.append("FileURLIO.readImage(");
-                declaration.getExpr().visit(this, sb);
-            } else if (declaration.getDim() != null && declaration.getExpr() == null) {
-            } else if (declaration.getDim() == null && declaration.getExpr() != null) {
+        Object argTemp = "";
+        NameDef nameDef = declaration.getNameDef();
 
+        argTemp = nameDef.visit(this, argTemp);
+
+        String Type = "";
+
+        if (declaration.getOp() != null) {
+            if (declaration.getOp().getKind() == Kind.ASSIGN) {
+                if (declaration.getNameDef().getType() == IMAGE && declaration.getExpr().getType() == IMAGE) {
+                    if (declaration.getDim() != null) {
+                        Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                        argTemp += " = ImageOps.resize(";
+                        argTemp = declaration.getExpr().visit(this, argTemp);
+                        argTemp += ", ";
+                        argTemp = declaration.getDim().visit(this, argTemp);
+                        argTemp += ");";
+                        arg += (String) argTemp;
+                        return arg;
+
+                    }
+                }
+                argTemp += " = ";
+                argTemp = declaration.getExpr().visit(this, argTemp);
+                arg += (String) argTemp;
+                arg += ";\n";
+                return arg;
+            }
+
+            else if (declaration.getOp().getKind() == Kind.LARROW && declaration.getExpr().getType() == STRING
+                    && declaration.getNameDef().getType() != IMAGE) {
+                Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+                argTemp += " = ";
+                Type type = declaration.getNameDef().getType();
+
+                if (type == STRING) {
+                    argTemp += "(String) ";
+                } else if (type == INT) {
+                    argTemp += "(int) ";
+                }
+
+                else if (type == FLOAT) {
+                    argTemp += "(float) ";
+                }
+
+                else if (type == COLOR) {
+                    argTemp += "(ColorTuple)";
+                }
+
+                else if (type == IMAGE) {
+                    argTemp += "(BufferedImage)";
+                }
+
+                else if (type == BOOLEAN) {
+                    argTemp += "(boolean)";
+                }
+
+                argTemp += "FileURLIO.readValueFromFile(";
+
+                argTemp += declaration.getExpr().getText();
+                arg += (String) argTemp;
+                arg += ");\n";
+                return arg;
+            }
+
+        }
+
+        if (nameDef.getType() == IMAGE) {
+            Imports.add("import java.awt.image.BufferedImage;\n");
+
+            if (declaration.getExpr() != null) {
+
+                Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+                if (nameDef.getDim() != null) {
+                    argTemp += "= FileURLIO.readImage(";
+
+                    argTemp = declaration.getExpr().visit(this, argTemp);
+                    argTemp += ", ";
+                    argTemp = declaration.getDim().visit(this, argTemp);
+                    argTemp += ");\n";
+                    arg += (String) argTemp;
+                    return arg;
+                } else {
+                    argTemp += "= FileURLIO.readImage(";
+                    // argTemp += " = ImageOps.";
+                    argTemp = declaration.getExpr().visit(this, argTemp);
+                    argTemp += ");\n";
+
+                    arg += (String) argTemp;
+                    return arg;
+                }
+            }
+
+            else {
+
+                if (nameDef.getDim() != null) {
+                    argTemp += " = new BufferedImage(";
+                    argTemp = declaration.getDim().visit(this, argTemp);
+                    argTemp += ", BufferedImage.TYPE_INT_RGB);\n";
+                    arg += (String) argTemp;
+                    return arg;
+                } else {
+
+                    // Should've thrown an exception beforehand.
+                }
+            }
+        }
+
+        if (declaration.getOp() != null) {
+            argTemp += " = ";
+
+            if (nameDef.getType() != declaration.getExpr().getType() && nameDef.getType() != IMAGE) {
+
+                Type coerce = nameDef.getType();
+
+                if (coerce == INT) {
+                    Type = "int";
+                    if (declaration.getExpr().getType() == STRING) {
+                        argTemp += "(" + Type + ") " + "FileURLIO.readValueFromFile(";
+                        argTemp = declaration.getExpr().visit(this, argTemp);
+                        argTemp += ");";
+                        arg += (String) argTemp;
+                        return arg;
+                    }
+                } else if (coerce == FLOAT) {
+                    Type = "float";
+                    if (declaration.getExpr().getType() == STRING) {
+
+                        argTemp += "(" + Type + ") " + "FileURLIO.readValueFromFile(";
+                        argTemp = declaration.getExpr().visit(this, argTemp);
+                        argTemp += ");";
+                        arg += (String) argTemp;
+                        return arg;
+                    }
+                } else if (coerce == STRING) {
+                    Type = "String";
+                } else if (coerce == BOOLEAN) {
+                    Type = "boolean";
+                    if (declaration.getExpr().getType() == STRING) {
+                        argTemp += "(" + Type + ") " + "FileURLIO.readValueFromFile(";
+                        argTemp = declaration.getExpr().visit(this, argTemp);
+                        argTemp += ");";
+                        arg += (String) argTemp;
+                        return arg;
+                    }
+                }
+
+                else if (coerce == IMAGE) {
+                    Type = "BufferedImage";
+
+                }
+
+                else if (coerce == COLOR) {
+                    Type = "ColorTuple";
+                    argTemp += "(" + Type + ") " + "FileURLIO.readValueFromFile(";
+                    argTemp = declaration.getExpr().visit(this, argTemp);
+                    argTemp += ");";
+                    arg += (String) argTemp;
+                    return arg;
+                }
+
+            }
+
+            else if (nameDef.getType() == COLOR) {
+                Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+            }
+
+            if (Type != "") {
+                argTemp += "(" + Type + ")";
+            }
+            Expr expr = declaration.getExpr();
+
+            argTemp = expr.visit(this, argTemp);
+        }
+
+        argTemp = argTemp + ";\n";
+
+        arg += (String) argTemp;
+        return arg;
+    }
+
+    @Override
+    public Object visitBinaryExpr(BinaryExpr binaryExpr, Object arg) throws Exception {
+
+        Object argTemp = "";
+        Expr LeftE = binaryExpr.getLeft();
+        Expr rightE = binaryExpr.getRight();
+        Type leftT = LeftE.getCoerceTo() != null ? LeftE.getCoerceTo() : LeftE.getType();
+        Type rightT = rightE.getCoerceTo() != null ? rightE.getCoerceTo() : rightE.getType();
+        Kind op = binaryExpr.getOp().getKind();
+
+        if (op == Kind.EQUALS || op == Kind.NOT_EQUALS) {
+            if (LeftE.getType() == STRING) {
+                if (op == Kind.NOT_EQUALS) {
+                    argTemp += "!";
+                }
+                argTemp += LeftE.getText();
+                argTemp += ".equals(";
+                argTemp += rightE.getText();
+                argTemp += ")";
+                arg += (String) argTemp;
+                return arg;
+
+            } else if (LeftE.getType() == COLOR) {
+                Object arg3 = "";
+                arg3 = LeftE.visit(this, arg3);
+                Object arg4 = "";
+                arg4 = rightE.visit(this, arg4);
+
+                if (op == Kind.NOT_EQUALS) {
+                    if (!arg3.equals(arg4)) {
+
+                        arg += "true";
+
+                    } else {
+                        arg += "false";
+                    }
+                } else {
+                    if (arg3.equals(arg4)) {
+                        arg += "true";
+                    } else {
+                        arg += "false";
+                    }
+                }
+                return arg;
+            }
+
+        }
+
+        if (leftT == IMAGE || leftT == COLOR || leftT == COLORFLOAT
+                || rightT == IMAGE || rightT == COLOR || rightT == COLORFLOAT) {
+
+            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+
+            if (leftT == IMAGE && rightT == COLOR || leftT == COLOR && rightT == IMAGE) {
+
+            }
+
+            else if (leftT == COLOR && rightT == COLOR) {
+
+                argTemp += "(ImageOps.binaryTupleOp(ImageOps.OP.valueOf(";
+                if (op == Kind.DIV) {
+                    argTemp += "\"DIV\"),";
+                } else if (op == Kind.MINUS) {
+                    argTemp += "\"MINUS\"), ";
+                } else if (op == Kind.PLUS) {
+                    argTemp += "\"PLUS\"), ";
+                } else if (op == Kind.TIMES) {
+                    argTemp += "\"TIMES\"), ";
+                } else if (op == Kind.MOD) {
+                    argTemp += "\"MOD\"), ";
+                }
+
+                argTemp = LeftE.visit(this, argTemp);
+                argTemp += ", ";
+
+                if (binaryExpr.getLeft().getType() == COLOR && binaryExpr.getRight().getType() == INT) {
+                    argTemp += "new ColorTuple(";
+                    argTemp = binaryExpr.getRight().visit(this, argTemp);
+                    argTemp += ")))";
+                    arg += (String) argTemp;
+                    return arg;
+                }
+                argTemp = rightE.visit(this, argTemp);
+                argTemp += "))";
+            }
+
+            else if (leftT == IMAGE && rightT == INT || leftT == INT && rightT == IMAGE) {
+
+                argTemp += "(ImageOps.binaryImageScalarOp(ImageOps.OP.valueOf(";
+                if (op == Kind.DIV) {
+                    argTemp += "\"DIV\"),";
+                } else if (op == Kind.MINUS) {
+                    argTemp += "\"MINUS\"), ";
+                } else if (op == Kind.PLUS) {
+                    argTemp += "\"PLUS\"), ";
+                } else if (op == Kind.TIMES) {
+                    argTemp += "\"TIMES\"), ";
+                } else if (op == Kind.MOD) {
+                    argTemp += "\"MOD\"), ";
+                }
+
+                argTemp = LeftE.visit(this, argTemp);
+                argTemp += ", ";
+
+                if (binaryExpr.getLeft().getType() == COLOR && binaryExpr.getRight().getType() == INT) {
+                    argTemp += "new ColorTuple(";
+                    argTemp = binaryExpr.getRight().visit(this, argTemp);
+                    argTemp += ")))";
+                    arg += (String) argTemp;
+                    return arg;
+                }
+                argTemp = rightE.visit(this, argTemp);
+                argTemp += "))";
+
+            }
+        } else {
+
+            argTemp = "(";
+            argTemp = binaryExpr.getLeft().visit(this, argTemp);
+            argTemp += (binaryExpr.getOp().getText());
+            argTemp = binaryExpr.getRight().visit(this, argTemp);
+            argTemp += ")";
+            if (leftT != rightT) {
+                argTemp = genTypeConversion(leftT, argTemp);
+
+            }
+        }
+
+        arg += (String) argTemp;
+        return arg;
+    }
+
+    @Override
+    public Object visitConsoleExpr(ConsoleExpr consoleExpr, Object arg) throws Exception {
+        if (consoleExpr.getType() == STRING) {
+            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+        } else {
+            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+        }
+
+        String Type = "";
+        String Type2 = "";
+
+        if (consoleExpr.getCoerceTo() == INT) {
+            Type = "Integer";
+            Type2 = "INT";
+        } else if (consoleExpr.getCoerceTo() == BOOLEAN) {
+            Type = "boolean";
+            Type2 = "BOOLEAN";
+        } else if (consoleExpr.getCoerceTo() == FLOAT) {
+            Type = "Float";
+            Type2 = "FLOAT";
+        } else if (consoleExpr.getCoerceTo() == STRING) {
+            Type = "String";
+            Type2 = "STRING";
+
+        } else if (consoleExpr.getCoerceTo() == COLOR) {
+            Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+            Type = "ColorTuple";
+            Type2 = "COLOR";
+        }
+
+        else {
+            throw new IllegalArgumentException("Compiler bug Unexpected value: " + consoleExpr.getCoerceTo());
+        }
+
+        arg = arg + "(" + Type + ")";
+        if (consoleExpr.getType() == STRING) {
+
+            arg += "FileURLIO.readValueFromFile(";
+
+            arg = arg + consoleExpr.getText() + ")";
+        } else {
+            arg += "ConsoleIO.readValueFromConsole(";
+            arg = arg + "\"" + Type2 + "\"" + ", " + "\"";
+            arg = arg + "Enter " + Type + ":" + "\"";
+            arg = arg + ")";
+        }
+
+        return arg;
+
+    }
+
+    @Override
+    public Object visitUnaryExpr(UnaryExpr unaryExpression, Object arg) throws Exception {
+        IToken op = unaryExpression.getOp();
+        Expr expr = unaryExpression.getExpr();
+        Object argTemp = op.getText();
+        if (op.getKind() == Kind.COLOR_OP) {
+            if ((expr.getType() == INT)) {
+
+                if (argTemp.equals("getRed")) {
+                    argTemp = "ColorTuple.getRed(";
+                } else if (argTemp.equals("getGreen")) {
+                    argTemp = "ColorTuple.getGreen(";
+                } else if (argTemp.equals("getBlue")) {
+                    argTemp = "ColorTuple.getBlue(";
+                }
+
+                argTemp = "(" + argTemp;
+                argTemp += "(";
+                argTemp = expr.visit(this, argTemp);
+                argTemp += ")))";
+                arg += (String) argTemp;
+                return arg;
+            }
+
+            else if (expr.getType() == IMAGE) {
+                Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+
+                if (argTemp.equals("getRed")) {
+                    argTemp = "ImageOps.extractRed(";
+                } else if (argTemp.equals("getGreen")) {
+                    argTemp = "ImageOps.extractGreen(";
+                } else if (argTemp.equals("getBlue")) {
+                    argTemp = "ImageOps.extractBlue(";
+                }
+
+                argTemp = expr.visit(this, argTemp);
+                argTemp += ")";
+                arg += (String) argTemp;
+                return arg;
+
+            }
+
+        }
+
+        else if (unaryExpression.getOp().getKind() == Kind.IMAGE_OP) {
+            argTemp = unaryExpression.getExpr().getText();
+            argTemp += ".";
+            argTemp += unaryExpression.getOp().getText();
+            argTemp += "()";
+            arg += (String) argTemp;
+            return arg;
+        }
+
+        argTemp = expr.visit(this, argTemp);
+        argTemp = "(" + argTemp + ")";
+
+        arg += (String) argTemp;
+
+        return arg;
+    }
+
+    @Override
+    public Object visitReadStatement(ReadStatement readStatement, Object arg) throws Exception {
+        if (readStatement.getSource().getType().toString().equals("STRING")) {
+            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+
+            arg += readStatement.getName();
+            arg += " = ";
+
+            Type _type = readStatement.getTargetDec().getType();
+
+            String type = "";
+
+            if (_type == INT) {
+                type = "Integer";
+            } else if (_type == STRING) {
+                type = "String";
+            } else if (_type == BOOLEAN) {
+                type = "boolean";
+            } else if (_type == FLOAT) {
+                type = "Float";
+            } else if (_type == COLOR) {
+                type = "ColorTuple";
+            } else if (_type == IMAGE) {
+                type = "BufferedImage";
+            }
+
+            arg = arg + "(" + type + ")" + "\n";
+            file = readStatement.getSource().getText();
+
+            if (readStatement.getTargetDec().getType() == IMAGE) {
+                if (readStatement.getTargetDec().getDim() != null) {
+
+                    Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                    arg += "ImageOps.resize(";
+                    arg += "FileURLIO.readImage(";
+                    arg = arg + file + ")";
+                    arg += ", ";
+                    arg = readStatement.getTargetDec().getDim().visit(this, arg);
+                    arg += ");\n";
+                    return arg;
+
+                }
+
+                if (readStatement.getTargetDec().getDim() != null) {
+
+                    Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                    arg += "ImageOps.resize(";
+                    arg += "FileURLIO.readValueFromFile(";
+                    arg = arg + file + ")";
+                    arg += ", ";
+                    arg = readStatement.getTargetDec().getDim().visit(this, arg);
+                    arg += ");\n";
+                    return arg;
+
+                }
+            }
+
+            else {
+                arg += "FileURLIO.readValueFromFile(";
+            }
+            arg = arg + file + ");";
+
+        }
+
+        else {
+            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+
+            arg += (readStatement.getName());
+
+            arg += (" = ");
+            Expr expr = readStatement.getSource();
+            arg = expr.visit(this, arg);
+            arg = arg + ";" + "\n";
+        }
+
+        return arg;
+    }
+
+    @Override
+    public Object visitWriteStatement(WriteStatement writeStatement, Object arg) throws Exception {
+        file = writeStatement.getDest().getText();
+
+        if (writeStatement.getDest().getType() == STRING && writeStatement.getSource().getType() != IMAGE) {
+            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+            arg += "FileURLIO.writeValue(";
+            Expr source = writeStatement.getSource();
+            arg = source.visit(this, arg);
+            arg = arg + ", " + "" + writeStatement.getDest().getText() + "" + ");" + "\n";
+
+        } else if (writeStatement.getSource().getType() == IMAGE && writeStatement.getDest().getType() == CONSOLE) {
+
+            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+            arg += "ConsoleIO.displayImageOnScreen(";
+            arg += writeStatement.getSource().getText();
+            arg = arg + ");" + "\n";
+
+        }
+
+        else if (writeStatement.getSource().getType() == IMAGE && writeStatement.getDest().getType() == STRING) {
+            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+            arg += "FileURLIO.writeImage(";
+            arg += writeStatement.getSource().getText();
+            arg += ", ";
+            arg += file;
+            arg += ");\n";
+            return arg;
+        }
+
+        else {
+            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+            arg += ("ConsoleIO.console.println(");
+            Expr source = writeStatement.getSource();
+            arg = source.visit(this, arg);
+            arg = arg + ");" + "\n";
+
+        }
+
+        return arg;
+    }
+
+    @Override
+    public Object visitAssignmentStatement(AssignmentStatement assignmentStatement, Object arg) throws Exception {
+        Object argTemp = "";
+        Expr expr = assignmentStatement.getExpr();
+        Type name = assignmentStatement.getTargetDec().getType();
+
+        if (name == IMAGE && expr.getType() == IMAGE) {
+            if (assignmentStatement.getTargetDec().getDim() != null) {
+                argTemp = assignmentStatement.getName();
+                argTemp += " = ";
+                Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                argTemp += "ImageOps.resize(";
+                argTemp += expr.getText();
+                argTemp += ", ";
+                argTemp = assignmentStatement.getTargetDec().getDim().visit(this, argTemp);
+                argTemp += ");\n";
+                arg += (String) argTemp;
+                return arg;
             } else {
-
+                argTemp = assignmentStatement.getName();
+                argTemp += " = ";
+                argTemp = expr.visit(this, argTemp);
+                argTemp += ";\n";
+                arg += (String) argTemp;
+                return arg;
             }
         }
-        if (declaration.getType() == Types.Type.COLOR) {
-            declaration.getExpr().visit(this, sb); // should go to visitColorExpr and make object ColorTuple
+
+        else if (name == IMAGE && expr.getType() == INT) {
+            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+            String image = assignmentStatement.getName();
+            argTemp = argTemp + "for (int x = 0; x < " + image + ".getWidth(); x++)\n    ";
+            argTemp = argTemp + "for (int y = 0; y < " + image + ".getHeight(); y++)\n        ";
+            argTemp = argTemp + "ImageOps.setColor(" + image + ", x, y, ";
+            argTemp += "new ColorTuple(";
+            argTemp = expr.visit(this, argTemp);
+            argTemp += "));\n";
+            arg += (String) argTemp;
+            return arg;
         }
-        return sb;
+
+        else if ((expr.getCoerceTo() == COLOR || (expr.getType() == COLOR && expr.getCoerceTo() == null))
+                && !(name == COLOR && expr.getType() == COLOR)) {
+            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            String image = assignmentStatement.getName();
+            argTemp = argTemp + "for (int x = 0; x < " + image + ".getWidth(); x++)\n    ";
+            argTemp = argTemp + "for (int y = 0; y < " + image + ".getHeight(); y++)\n        ";
+            argTemp = argTemp + "ImageOps.setColor(" + image + ", x, y, ";
+            argTemp = expr.visit(this, argTemp);
+            argTemp += ");\n";
+            arg += (String) argTemp;
+            return arg;
+        }
+
+        else if (expr.getCoerceTo() == INT) {
+            String image = assignmentStatement.getTargetDec().getText();
+            argTemp += "ColorTuple X = new ColorTuple(truncate(";
+            argTemp = expr.visit(this, argTemp);
+            argTemp += "));\n";
+            argTemp = argTemp + "for (int x = 0; x < " + image + ".getWidth(); x++)\n    ";
+            argTemp = argTemp + "for (int y = 0; y < " + image + ".getHeight(); y++)\n        ";
+            argTemp = argTemp + "ImageOps.setColor(" + image + ", x, y, X);\n";
+            arg += (String) argTemp;
+            return arg;
+        }
+
+        if (expr.getType() != expr.getCoerceTo()) {
+            Type coerce = expr.getCoerceTo();
+            String type = "";
+            if (coerce == INT) {
+                type = "int";
+            } else if (coerce == FLOAT) {
+                type = "float";
+            } else if (coerce == STRING) {
+                type = "String";
+            } else if (coerce == BOOLEAN) {
+                type = "boolean";
+
+            }
+
+            else if (coerce == IMAGE) {
+                type = "BufferedImage";
+
+            }
+
+            else if (coerce == COLOR) {
+                type = "ColorTuple";
+
+            }
+
+            if (type != "") {
+                argTemp += "(" + type + ")";
+            }
+        }
+        argTemp += assignmentStatement.getName();
+        argTemp += " = ";
+        argTemp = expr.visit(this, argTemp);
+        argTemp = argTemp + ";" + "\n";
+        arg += (String) argTemp;
+        return arg;
+    }
+
+    @Override
+    public Object visitColorConstExpr(ColorConstExpr colorConstExpr, Object arg) throws Exception {
+        Imports.add("import java.awt.Color;\n");
+        Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+        arg += "ColorTuple.toColorTuple(Color.";
+        arg += colorConstExpr.getText();
+        arg += ")";
+
+        return arg;
+    }
+
+    @Override
+    public Object visitColorExpr(ColorExpr colorExpr, Object arg) throws Exception {
+        Expr red = colorExpr.getRed();
+        Expr green = colorExpr.getGreen();
+        Expr blue = colorExpr.getBlue();
+
+        arg += "new ColorTuple(";
+        arg = red.visit(this, arg);
+        arg += ", ";
+        arg = green.visit(this, arg);
+        arg += ", ";
+        arg = blue.visit(this, arg);
+        arg += ")";
+
+        Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+
+        return arg;
+    }
+
+    @Override
+    public Object visitDimension(Dimension dimension, Object arg) throws Exception {
+        Object argTemp = "";
+        argTemp = dimension.getWidth().visit(this, argTemp);
+        argTemp += ", ";
+        argTemp = dimension.getHeight().visit(this, argTemp);
+        arg += (String) argTemp;
+        return arg;
+    }
+
+    @Override
+    public Object visitPixelSelector(PixelSelector pixelSelector, Object arg) throws Exception {
+
+        pixelSelector.getX().visit(this, arg);
+        arg += ", ";
+        pixelSelector.getY().visit(this, arg);
+        return arg;
     }
 
     @Override
     public Object visitUnaryExprPostfix(UnaryExprPostfix unaryExprPostfix, Object arg) throws Exception {
-        throw new UnsupportedOperationException("Not implemented yet");
+        Imports.add("import java.awt.image.BufferedImage;\n");
+        Object argTemp = "";
+        argTemp += "ColorTuple.unpack(";
+        argTemp += unaryExprPostfix.getExpr().getText();
+        argTemp += ".getRGB(";
+        argTemp += unaryExprPostfix.getSelector().getX().getText();
+        argTemp += ", ";
+        argTemp += unaryExprPostfix.getSelector().getY().getText();
+        argTemp += "))";
+        arg += (String) argTemp;
+        return arg;
+    }
+
+    @Override
+    public Object visitNameDefWithDim(NameDefWithDim nameDefWithDim, Object arg) throws Exception {
+
+        String Type = "";
+
+        if (nameDefWithDim.getType() == IMAGE) {
+            Type = "BufferedImage";
+
+            Imports.add("import java.awt.image.BufferedImage;\n");
+
+        } else if (nameDefWithDim.getType() == COLOR) {
+            Type = "ColorTuple";
+
+        } else {
+            throw new IllegalArgumentException("Compiler bug Unexpected value: " + nameDefWithDim.getType());
+        }
+
+        arg = Type + " " + (nameDefWithDim.getName()) + arg;
+        return arg;
     }
 }
