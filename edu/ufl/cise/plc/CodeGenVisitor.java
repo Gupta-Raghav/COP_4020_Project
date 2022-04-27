@@ -31,13 +31,12 @@ import edu.ufl.cise.plc.ast.UnaryExprPostfix;
 import edu.ufl.cise.plc.ast.VarDeclaration;
 import edu.ufl.cise.plc.ast.WriteStatement;
 import edu.ufl.cise.plc.runtime.ConsoleIO;
-// import jdk.incubator.foreign.FunctionDescriptor;
 
 import static edu.ufl.cise.plc.ast.Types.Type.*;
 
 public class CodeGenVisitor implements ASTVisitor {
     String packageName = "";
-    Set<String> Imports = new HashSet<String>();
+    Set<String> impts = new HashSet<String>();
     String file = "";
 
     public CodeGenVisitor(String packageName) {
@@ -123,7 +122,7 @@ public class CodeGenVisitor implements ASTVisitor {
     @Override
     public Object visitIdentExpr(IdentExpr identExpr, Object arg) throws Exception {
         if (identExpr.getCoerceTo() == IMAGE) {
-            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
             arg += "ImageOps.clone(";
         } else if (identExpr.getCoerceTo() == INT && identExpr.getType() == COLOR) {
             arg += (identExpr.getText());
@@ -216,7 +215,7 @@ public class CodeGenVisitor implements ASTVisitor {
 
         Object arg3 = "package " + packageName + ";" + "\n";
 
-        Iterator<String> itr = Imports.iterator();
+        Iterator<String> itr = impts.iterator();
 
         while (itr.hasNext()) {
             arg3 += itr.next();
@@ -276,7 +275,7 @@ public class CodeGenVisitor implements ASTVisitor {
             if (declaration.getOp().getKind() == Kind.ASSIGN) {
                 if (declaration.getNameDef().getType() == IMAGE && declaration.getExpr().getType() == IMAGE) {
                     if (declaration.getDim() != null) {
-                        Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                        impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
                         argTemp += " = ImageOps.resize(";
                         argTemp = declaration.getExpr().visit(this, argTemp);
                         argTemp += ", ";
@@ -296,7 +295,7 @@ public class CodeGenVisitor implements ASTVisitor {
 
             else if (declaration.getOp().getKind() == Kind.LARROW && declaration.getExpr().getType() == STRING
                     && declaration.getNameDef().getType() != IMAGE) {
-                Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+                impts.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
                 argTemp += " = ";
                 Type type = declaration.getNameDef().getType();
 
@@ -333,11 +332,11 @@ public class CodeGenVisitor implements ASTVisitor {
         }
 
         if (nameDef.getType() == IMAGE) {
-            Imports.add("import java.awt.image.BufferedImage;\n");
+            impts.add("import java.awt.image.BufferedImage;\n");
 
             if (declaration.getExpr() != null) {
 
-                Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+                impts.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
                 if (nameDef.getDim() != null) {
                     argTemp += "= FileURLIO.readImage(";
 
@@ -429,7 +428,7 @@ public class CodeGenVisitor implements ASTVisitor {
             }
 
             else if (nameDef.getType() == COLOR) {
-                Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+                impts.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
             }
 
             if (Type != "") {
@@ -497,7 +496,7 @@ public class CodeGenVisitor implements ASTVisitor {
         if (leftT == IMAGE || leftT == COLOR || leftT == COLORFLOAT
                 || rightT == IMAGE || rightT == COLOR || rightT == COLORFLOAT) {
 
-            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
 
             if (leftT == IMAGE && rightT == COLOR || leftT == COLOR && rightT == IMAGE) {
 
@@ -581,9 +580,9 @@ public class CodeGenVisitor implements ASTVisitor {
     @Override
     public Object visitConsoleExpr(ConsoleExpr consoleExpr, Object arg) throws Exception {
         if (consoleExpr.getType() == STRING) {
-            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
         } else {
-            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
         }
 
         String Type = "";
@@ -603,7 +602,7 @@ public class CodeGenVisitor implements ASTVisitor {
             Type2 = "STRING";
 
         } else if (consoleExpr.getCoerceTo() == COLOR) {
-            Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
             Type = "ColorTuple";
             Type2 = "COLOR";
         }
@@ -654,7 +653,7 @@ public class CodeGenVisitor implements ASTVisitor {
             }
 
             else if (expr.getType() == IMAGE) {
-                Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
 
                 if (argTemp.equals("getRed")) {
                     argTemp = "ImageOps.extractRed(";
@@ -693,7 +692,7 @@ public class CodeGenVisitor implements ASTVisitor {
     @Override
     public Object visitReadStatement(ReadStatement readStatement, Object arg) throws Exception {
         if (readStatement.getSource().getType().toString().equals("STRING")) {
-            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
 
             arg += readStatement.getName();
             arg += " = ";
@@ -722,7 +721,7 @@ public class CodeGenVisitor implements ASTVisitor {
             if (readStatement.getTargetDec().getType() == IMAGE) {
                 if (readStatement.getTargetDec().getDim() != null) {
 
-                    Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                    impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
                     arg += "ImageOps.resize(";
                     arg += "FileURLIO.readImage(";
                     arg = arg + file + ")";
@@ -735,7 +734,7 @@ public class CodeGenVisitor implements ASTVisitor {
 
                 if (readStatement.getTargetDec().getDim() != null) {
 
-                    Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                    impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
                     arg += "ImageOps.resize(";
                     arg += "FileURLIO.readValueFromFile(";
                     arg = arg + file + ")";
@@ -755,7 +754,7 @@ public class CodeGenVisitor implements ASTVisitor {
         }
 
         else {
-            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
 
             arg += (readStatement.getName());
 
@@ -773,7 +772,7 @@ public class CodeGenVisitor implements ASTVisitor {
         file = writeStatement.getDest().getText();
 
         if (writeStatement.getDest().getType() == STRING && writeStatement.getSource().getType() != IMAGE) {
-            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
             arg += "FileURLIO.writeValue(";
             Expr source = writeStatement.getSource();
             arg = source.visit(this, arg);
@@ -781,7 +780,7 @@ public class CodeGenVisitor implements ASTVisitor {
 
         } else if (writeStatement.getSource().getType() == IMAGE && writeStatement.getDest().getType() == CONSOLE) {
 
-            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
             arg += "ConsoleIO.displayImageOnScreen(";
             arg += writeStatement.getSource().getText();
             arg = arg + ");" + "\n";
@@ -789,7 +788,7 @@ public class CodeGenVisitor implements ASTVisitor {
         }
 
         else if (writeStatement.getSource().getType() == IMAGE && writeStatement.getDest().getType() == STRING) {
-            Imports.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.FileURLIO;\n");
             arg += "FileURLIO.writeImage(";
             arg += writeStatement.getSource().getText();
             arg += ", ";
@@ -799,7 +798,7 @@ public class CodeGenVisitor implements ASTVisitor {
         }
 
         else {
-            Imports.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ConsoleIO;\n");
             arg += ("ConsoleIO.console.println(");
             Expr source = writeStatement.getSource();
             arg = source.visit(this, arg);
@@ -820,7 +819,7 @@ public class CodeGenVisitor implements ASTVisitor {
             if (assignmentStatement.getTargetDec().getDim() != null) {
                 argTemp = assignmentStatement.getName();
                 argTemp += " = ";
-                Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+                impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
                 argTemp += "ImageOps.resize(";
                 argTemp += expr.getText();
                 argTemp += ", ";
@@ -839,8 +838,8 @@ public class CodeGenVisitor implements ASTVisitor {
         }
 
         else if (name == IMAGE && expr.getType() == INT) {
-            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
-            Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
             String image = assignmentStatement.getName();
             argTemp = argTemp + "for (int x = 0; x < " + image + ".getWidth(); x++)\n    ";
             argTemp = argTemp + "for (int y = 0; y < " + image + ".getHeight(); y++)\n        ";
@@ -854,7 +853,7 @@ public class CodeGenVisitor implements ASTVisitor {
 
         else if ((expr.getCoerceTo() == COLOR || (expr.getType() == COLOR && expr.getCoerceTo() == null))
                 && !(name == COLOR && expr.getType() == COLOR)) {
-            Imports.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
+            impts.add("import edu.ufl.cise.plc.runtime.ImageOps;\n");
             String image = assignmentStatement.getName();
             argTemp = argTemp + "for (int x = 0; x < " + image + ".getWidth(); x++)\n    ";
             argTemp = argTemp + "for (int y = 0; y < " + image + ".getHeight(); y++)\n        ";
@@ -915,8 +914,8 @@ public class CodeGenVisitor implements ASTVisitor {
 
     @Override
     public Object visitColorConstExpr(ColorConstExpr colorConstExpr, Object arg) throws Exception {
-        Imports.add("import java.awt.Color;\n");
-        Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+        impts.add("import java.awt.Color;\n");
+        impts.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
         arg += "ColorTuple.toColorTuple(Color.";
         arg += colorConstExpr.getText();
         arg += ")";
@@ -938,7 +937,7 @@ public class CodeGenVisitor implements ASTVisitor {
         arg = blue.visit(this, arg);
         arg += ")";
 
-        Imports.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
+        impts.add("import edu.ufl.cise.plc.runtime.ColorTuple;\n");
 
         return arg;
     }
@@ -964,7 +963,7 @@ public class CodeGenVisitor implements ASTVisitor {
 
     @Override
     public Object visitUnaryExprPostfix(UnaryExprPostfix unaryExprPostfix, Object arg) throws Exception {
-        Imports.add("import java.awt.image.BufferedImage;\n");
+        impts.add("import java.awt.image.BufferedImage;\n");
         Object argTemp = "";
         argTemp += "ColorTuple.unpack(";
         argTemp += unaryExprPostfix.getExpr().getText();
@@ -985,7 +984,7 @@ public class CodeGenVisitor implements ASTVisitor {
         if (nameDefWithDim.getType() == IMAGE) {
             Type = "BufferedImage";
 
-            Imports.add("import java.awt.image.BufferedImage;\n");
+            impts.add("import java.awt.image.BufferedImage;\n");
 
         } else if (nameDefWithDim.getType() == COLOR) {
             Type = "ColorTuple";
