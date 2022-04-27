@@ -1,4 +1,4 @@
-package edu.ufl.cise.plc;
+package edu.ufl.cise.plc.test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -9,6 +9,7 @@ import java.io.IOException;
 
 import org.junit.jupiter.api.Test;
 
+import edu.ufl.cise.plc.CompilerComponentFactory;
 import edu.ufl.cise.plc.ast.ASTNode;
 import edu.ufl.cise.plc.ast.ASTVisitor;
 import edu.ufl.cise.plc.ast.Program;

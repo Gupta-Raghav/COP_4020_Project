@@ -2,36 +2,11 @@ package edu.ufl.cise.plc;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import edu.ufl.cise.plc.IToken.Kind;
-import edu.ufl.cise.plc.ast.ASTNode;
-import edu.ufl.cise.plc.ast.ASTVisitor;
-import edu.ufl.cise.plc.ast.AssignmentStatement;
-import edu.ufl.cise.plc.ast.BinaryExpr;
-import edu.ufl.cise.plc.ast.BooleanLitExpr;
-import edu.ufl.cise.plc.ast.ColorConstExpr;
-import edu.ufl.cise.plc.ast.ColorExpr;
-import edu.ufl.cise.plc.ast.ConditionalExpr;
-import edu.ufl.cise.plc.ast.ConsoleExpr;
-import edu.ufl.cise.plc.ast.Declaration;
-import edu.ufl.cise.plc.ast.Dimension;
-import edu.ufl.cise.plc.ast.Expr;
-import edu.ufl.cise.plc.ast.FloatLitExpr;
-import edu.ufl.cise.plc.ast.IdentExpr;
-import edu.ufl.cise.plc.ast.IntLitExpr;
-import edu.ufl.cise.plc.ast.NameDef;
-import edu.ufl.cise.plc.ast.NameDefWithDim;
-import edu.ufl.cise.plc.ast.PixelSelector;
-import edu.ufl.cise.plc.ast.Program;
-import edu.ufl.cise.plc.ast.ReadStatement;
-import edu.ufl.cise.plc.ast.ReturnStatement;
-import edu.ufl.cise.plc.ast.StringLitExpr;
+import edu.ufl.cise.plc.ast.*;
 import edu.ufl.cise.plc.ast.Types.Type;
-import edu.ufl.cise.plc.ast.UnaryExpr;
-import edu.ufl.cise.plc.ast.UnaryExprPostfix;
-import edu.ufl.cise.plc.ast.VarDeclaration;
-import edu.ufl.cise.plc.ast.WriteStatement;
+
 
 import static edu.ufl.cise.plc.ast.Types.Type.*;
 
@@ -39,19 +14,17 @@ public class TypeCheckVisitor implements ASTVisitor {
 
 	SymbolTable symbolTable = new SymbolTable();
 	Program root;
+	
+	record Pair<T0,T1>(T0 t0, T1 t1) {
 
-	record Pair<T0, T1> (T0 t0, T1 t1) {
-	}; // may be useful for constructing lookup tables.
-
+	};  
+	
 	private void check(boolean condition, ASTNode node, String message) throws TypeCheckException {
 		if (!condition) {
 			throw new TypeCheckException(message, node.getSourceLoc());
 		}
 	}
 
-	// The type of a BooleanLitExpr is always BOOLEAN.
-	// Set the type in AST Node for later passes (code generation)
-	// Return the type for convenience in this visitor.
 	@Override
 	public Object visitBooleanLitExpr(BooleanLitExpr booleanLitExpr, Object arg) throws Exception {
 		booleanLitExpr.setType(Type.BOOLEAN);
@@ -61,13 +34,13 @@ public class TypeCheckVisitor implements ASTVisitor {
 	@Override
 	public Object visitStringLitExpr(StringLitExpr stringLitExpr, Object arg) throws Exception {
 		stringLitExpr.setType(Type.STRING);
-		return STRING;
+		return Type.STRING;
 	}
 
 	@Override
 	public Object visitIntLitExpr(IntLitExpr intLitExpr, Object arg) throws Exception {
 		intLitExpr.setType(Type.INT);
-		return INT;
+		return Type.INT;
 	}
 
 	@Override
@@ -79,7 +52,7 @@ public class TypeCheckVisitor implements ASTVisitor {
 	@Override
 	public Object visitColorConstExpr(ColorConstExpr colorConstExpr, Object arg) throws Exception {
 		colorConstExpr.setType(Type.COLOR);
-		return COLOR;
+		return Type.COLOR;
 	}
 
 	@Override
@@ -88,9 +61,6 @@ public class TypeCheckVisitor implements ASTVisitor {
 		return Type.CONSOLE;
 	}
 
-	// Visits the child expressions to get their type (and ensure they are correctly
-	// typed)
-	// then checks the given conditions.
 	@Override
 	public Object visitColorExpr(ColorExpr colorExpr, Object arg) throws Exception {
 		Type redType = (Type) colorExpr.getRed().visit(this, arg);
@@ -101,160 +71,201 @@ public class TypeCheckVisitor implements ASTVisitor {
 		Type exprType = (redType == Type.INT) ? Type.COLOR : Type.COLORFLOAT;
 		colorExpr.setType(exprType);
 		return exprType;
-	}
+	}	
 
-	// Maps forms a lookup table that maps an operator expression pair into result
-	// type.
-	// This more convenient than a long chain of if-else statements.
-	// Given combinations are legal; if the operator expression pair is not in the
-	// map, it is an error.
-	Map<Pair<Kind, Type>, Type> unaryExprs = Map.of(
-			new Pair<Kind, Type>(Kind.BANG, BOOLEAN), BOOLEAN,
-			new Pair<Kind, Type>(Kind.MINUS, FLOAT), FLOAT,
-			new Pair<Kind, Type>(Kind.MINUS, INT), INT,
-			new Pair<Kind, Type>(Kind.COLOR_OP, INT), INT,
-			new Pair<Kind, Type>(Kind.COLOR_OP, COLOR), INT,
-			new Pair<Kind, Type>(Kind.COLOR_OP, IMAGE), IMAGE,
-			new Pair<Kind, Type>(Kind.IMAGE_OP, IMAGE), INT);
 
-	// Visits the child expression to get the type, then uses the above table to
-	// determine the result type
-	// and check that this node represents a legal combination of operator and
-	// expression type.
+	Map<Pair<Kind,Type>, Type> unaryExprs = Map.of(
+			new Pair<Kind,Type>(Kind.BANG,BOOLEAN), BOOLEAN,
+			new Pair<Kind,Type>(Kind.MINUS, FLOAT), FLOAT,
+			new Pair<Kind,Type>(Kind.MINUS, INT),INT,
+			new Pair<Kind,Type>(Kind.COLOR_OP,INT), INT,
+			new Pair<Kind,Type>(Kind.COLOR_OP,COLOR), INT,
+			new Pair<Kind,Type>(Kind.COLOR_OP,IMAGE), IMAGE,
+			new Pair<Kind,Type>(Kind.IMAGE_OP,IMAGE), INT
+			);
+	
 	@Override
 	public Object visitUnaryExpr(UnaryExpr unaryExpr, Object arg) throws Exception {
-		// !, -, getRed, getGreen, getBlue
 		Kind op = unaryExpr.getOp().getKind();
 		Type exprType = (Type) unaryExpr.getExpr().visit(this, arg);
-		// Use the lookup table above to both check for a legal combination of operator
-		// and expression, and to get result type.
-		Type resultType;
-		if (op == null)
-			resultType = exprType;
-		else
-			resultType = unaryExprs.get(new Pair<Kind, Type>(op, exprType));
+		Type resultType = unaryExprs.get(new Pair<>(op, exprType));
 		check(resultType != null, unaryExpr, "incompatible types for unaryExpr");
-		// Save the type of the unary expression in the AST node for use in code
-		// generation later.
 		unaryExpr.setType(resultType);
-		// return the type for convenience in this visitor.
 		return resultType;
 	}
 
-	// This method has several cases. Work incrementally and test as you go.
+
 	@Override
 	public Object visitBinaryExpr(BinaryExpr binaryExpr, Object arg) throws Exception {
-
 		Kind op = binaryExpr.getOp().getKind();
 		Type leftType = (Type) binaryExpr.getLeft().visit(this, arg);
-		Type leftCoerce = (Type) binaryExpr.getLeft().getCoerceTo();
 		Type rightType = (Type) binaryExpr.getRight().visit(this, arg);
-		Type rightCoerce = (Type) binaryExpr.getRight().getCoerceTo();
+
 		Type resultType = null;
-
-		if ((op == Kind.OR || op == Kind.AND) && leftType == BOOLEAN && rightType == BOOLEAN)
-			resultType = BOOLEAN;
-		else if ((op == Kind.EQUALS || op == Kind.NOT_EQUALS) && leftType == rightType)
-			resultType = BOOLEAN;
-		else if (op == Kind.PLUS || op == Kind.MINUS || op == Kind.TIMES || op == Kind.DIV || op == Kind.MOD) {
-			if (leftType == INT && rightType == INT)
-				resultType = INT;
-			else if (leftType == FLOAT && rightType == FLOAT)
-				resultType = FLOAT;
-			else if (leftType == INT && rightType == FLOAT) {
-				binaryExpr.getLeft().setCoerceTo(FLOAT);
-				resultType = FLOAT;
-			} else if (leftType == FLOAT && rightType == INT) {
-				binaryExpr.getRight().setCoerceTo(FLOAT);
-				resultType = FLOAT;
-			} else if (leftType == COLOR && rightType == COLOR)
-				resultType = COLOR;
-			else if (leftType == COLORFLOAT && rightType == COLORFLOAT)
-				resultType = COLORFLOAT;
-			else if (leftType == COLOR && rightType == COLORFLOAT) {
-				binaryExpr.getLeft().setCoerceTo(COLORFLOAT);
-				resultType = COLORFLOAT;
-			} else if (leftType == COLORFLOAT && rightType == COLOR) {
-				binaryExpr.getRight().setCoerceTo(COLORFLOAT);
-				resultType = COLORFLOAT;
-			} else if (leftType == IMAGE && rightType == IMAGE)
-				resultType = IMAGE;
-			else if (op == Kind.TIMES || op == Kind.DIV || op == Kind.MOD) {
-				if (leftType == IMAGE && rightType == INT)
-					resultType = IMAGE;
-				else if (leftType == IMAGE && rightType == FLOAT)
-					resultType = IMAGE;
-				else if (leftType == INT && rightType == COLOR) {
-					binaryExpr.getLeft().setCoerceTo(COLOR);
-					resultType = COLOR;
-				} else if (leftType == COLOR && rightType == INT) {
-					binaryExpr.getRight().setCoerceTo(COLOR);
-					resultType = COLOR;
-				} else if (leftType == FLOAT && rightType == COLOR) {
-					binaryExpr.getLeft().setCoerceTo(COLORFLOAT);
-					binaryExpr.getRight().setCoerceTo(COLORFLOAT);
-					resultType = COLORFLOAT;
-				} else if (leftType == COLOR && rightType == FLOAT) {
-					resultType = COLORFLOAT;
-					binaryExpr.getLeft().setCoerceTo(COLORFLOAT);
-					binaryExpr.getRight().setCoerceTo(COLORFLOAT);
-				}
+		switch (op) { 
+			case AND, OR -> {
+				check(leftType == Type.BOOLEAN && rightType == Type.BOOLEAN, binaryExpr, "Booleans required");
+				resultType = Type.BOOLEAN;
 			}
-		} else if (op == Kind.LT || op == Kind.LE || op == Kind.GT || op == Kind.GE) {
-			if (leftType == INT && rightType == INT)
-				resultType = BOOLEAN;
-			else if (leftType == FLOAT && rightType == FLOAT)
-				resultType = BOOLEAN;
-			else if (leftType == INT && leftCoerce == FLOAT && rightType == FLOAT)
-				resultType = BOOLEAN;
-			else if (leftType == FLOAT && rightCoerce == FLOAT && rightType == INT)
-				resultType = BOOLEAN;
+			case EQUALS, NOT_EQUALS -> {
+				check(leftType == rightType, binaryExpr, "Incompatible types for comparison");
+				resultType = Type.BOOLEAN;
+			}
+			case PLUS, MINUS -> {
+				if (leftType == Type.INT && rightType == Type.INT) {
+					resultType = Type.INT;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.FLOAT) {
+					resultType = Type.FLOAT;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.INT) {
+					binaryExpr.getRight().setCoerceTo(Type.FLOAT);
+					resultType = Type.FLOAT;
+				}
+				else if (leftType == Type.INT && rightType == Type.FLOAT) {
+					binaryExpr.getLeft().setCoerceTo(Type.FLOAT);
+					resultType = Type.FLOAT;
+				}
+				else if (leftType == Type.COLOR && rightType == Type.COLOR) {
+					resultType = Type.COLOR;
+				}
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLORFLOAT) {
+					resultType = Type.COLORFLOAT;
+				}
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLOR) {
+					binaryExpr.getRight().setCoerceTo(Type.COLORFLOAT);
+					resultType = Type.COLORFLOAT;
+				}
+				else if (leftType == Type.COLOR && rightType == Type.COLORFLOAT) {
+					binaryExpr.getLeft().setCoerceTo(Type.COLORFLOAT);
+					resultType = Type.COLORFLOAT;
+				}
+				else if (leftType == Type.IMAGE && rightType == Type.IMAGE) {
+					resultType = Type.IMAGE;
+				}
+				else check(false, binaryExpr, "incompatible types for operator");
+			}
+			case TIMES, DIV, MOD -> {
+				if (leftType == Type.INT && rightType == Type.INT) {
+					resultType = Type.INT;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.FLOAT) {
+					resultType = Type.FLOAT;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.INT) {
+					binaryExpr.getRight().setCoerceTo(Type.FLOAT);
+					resultType = Type.FLOAT;
+				}
+				else if (leftType == Type.INT && rightType == Type.FLOAT) {
+					binaryExpr.getLeft().setCoerceTo(Type.FLOAT);
+					resultType = Type.FLOAT;
+				}
+				else if (leftType == Type.COLOR && rightType == Type.COLOR) {
+					resultType = Type.COLOR;
+				}
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLORFLOAT) {
+					resultType = Type.COLORFLOAT;
+				}
+				else if (leftType == Type.COLORFLOAT && rightType == Type.COLOR) {
+					binaryExpr.getRight().setCoerceTo(Type.COLORFLOAT);
+					resultType = Type.COLORFLOAT;
+				}
+				else if (leftType == Type.COLOR && rightType == Type.COLORFLOAT) {
+					binaryExpr.getLeft().setCoerceTo(Type.COLORFLOAT);
+					resultType = Type.COLORFLOAT;
+				}
+				else if (leftType == Type.IMAGE && rightType == Type.IMAGE) {
+					resultType = Type.IMAGE;
+				}
+				else if (leftType == Type.IMAGE && rightType == Type.INT) {
+					resultType = Type.IMAGE;
+				}
+				else if (leftType == Type.IMAGE && rightType == Type.FLOAT) {
+					resultType = Type.IMAGE;
+				}
+				else if (leftType == Type.INT && rightType == Type.COLOR) {
+					binaryExpr.getLeft().setCoerceTo(Type.COLOR);
+					resultType = Type.COLOR;
+				}
+				else if (leftType == Type.COLOR && rightType == Type.INT) {
+					binaryExpr.getRight().setCoerceTo(Type.COLOR);
+					resultType = Type.COLOR;
+				}
+				else if (leftType == Type.COLOR && rightType == FLOAT) {
+					binaryExpr.getRight().setCoerceTo(Type.COLOR);
+					resultType = Type.COLOR;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.COLOR) {
+					binaryExpr.getLeft().setCoerceTo(Type.COLORFLOAT);
+					binaryExpr.getRight().setCoerceTo(Type.COLORFLOAT);
+					resultType = Type.COLORFLOAT;
+				} else if (leftType == rightType) {
+					resultType = leftType;
+				}
+				else check(false, binaryExpr, "incompatible types for operator");
+			}
+			case LT, LE, GT, GE -> {
+				if (leftType == Type.INT && rightType == Type.INT) {
+					resultType = Type.BOOLEAN;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.FLOAT) {
+					resultType = Type.BOOLEAN;
+				}
+				else if (leftType == Type.INT && rightType == Type.FLOAT) {
+					binaryExpr.getLeft().setCoerceTo(Type.FLOAT);
+					resultType = Type.BOOLEAN;
+				}
+				else if (leftType == Type.FLOAT && rightType == Type.INT) {
+					binaryExpr.getRight().setCoerceTo(Type.FLOAT);
+					resultType = Type.BOOLEAN;
+				}
+				else check(false, binaryExpr, "incompatible types for operator");
+			}
+			default -> check(false, binaryExpr, "use a real operator");
 		}
-
-		check(resultType != null, binaryExpr, "incompatible types for binary expression");
 		binaryExpr.setType(resultType);
 		return resultType;
-
 	}
 
 	@Override
 	public Object visitIdentExpr(IdentExpr identExpr, Object arg) throws Exception {
 		String name = identExpr.getText();
-		check(symbolTable.lookup(name) != null, identExpr, "ident is not in symbol table");
-		check(symbolTable.lookup(name).isInitialized(), identExpr, "ident: " + name + " is not initialized");
-		Type returnType = symbolTable.lookup(name).getType();
-		identExpr.setType(returnType);
-		return returnType;
+		Declaration dec = symbolTable.lookup(name);
+		check(dec != null, identExpr, "Undefined identifier " + name);
+		check(dec.isInitialized(), identExpr, "Uninitialized identifier used: " + name);
+
+		identExpr.setDec(dec); 
+
+		Type type = dec.getType();
+		identExpr.setType(type);
+		return type;
 	}
 
 	@Override
 	public Object visitConditionalExpr(ConditionalExpr conditionalExpr, Object arg) throws Exception {
-		Type conditionType = (Type) conditionalExpr.getCondition().visit(this, arg);
+		Type conditionalType = (Type) conditionalExpr.getCondition().visit(this, arg);
+
 		Type trueCaseType = (Type) conditionalExpr.getTrueCase().visit(this, arg);
-		;
 		Type falseCaseType = (Type) conditionalExpr.getFalseCase().visit(this, arg);
-		;
-		check(conditionType == BOOLEAN, conditionalExpr, "condition must be boolean");
-		check(trueCaseType == falseCaseType, conditionalExpr, "true and false cases must be same type");
+
+		check(conditionalType == Type.BOOLEAN, conditionalExpr, "Condition case must be boolean!");
+		check(trueCaseType == falseCaseType, conditionalExpr, "True case type must equal false case type!");
+
 		conditionalExpr.setType(trueCaseType);
 		return trueCaseType;
 	}
 
 	@Override
 	public Object visitDimension(Dimension dimension, Object arg) throws Exception {
-		Type leftType = (Type) dimension.getHeight().visit(this, arg);
-		check(leftType == Type.INT, dimension.getHeight(), "only ints as dimension components");
-		Type rightType = (Type) dimension.getWidth().visit(this, arg);
-		check(rightType == Type.INT, dimension.getWidth(), "only ints as dimension components");
+		Type expr1Type = (Type) dimension.getWidth().visit(this, arg);
+		Type expr2Type = (Type) dimension.getHeight().visit(this, arg);
+
+		check(expr1Type == Type.INT, dimension.getWidth(), "Width is not of type int!");
+		check(expr2Type == Type.INT, dimension.getHeight(), "Height is not of type int!");
 		return null;
 	}
 
 	@Override
-	// This method can only be used to check PixelSelector objects on the right hand
-	// side of an assignment.
-	// Either modify to pass in context info and add code to handle both cases, or
-	// when on left side
-	// of assignment, check fields from parent assignment statement.
 	public Object visitPixelSelector(PixelSelector pixelSelector, Object arg) throws Exception {
 		Type xType = (Type) pixelSelector.getX().visit(this, arg);
 		check(xType == Type.INT, pixelSelector.getX(), "only ints as pixel selector components");
@@ -264,72 +275,125 @@ public class TypeCheckVisitor implements ASTVisitor {
 	}
 
 	@Override
-	// This method several cases--you don't have to implement them all at once.
-	// Work incrementally and systematically, testing as you go.
 	public Object visitAssignmentStatement(AssignmentStatement assignmentStatement, Object arg) throws Exception {
-		Declaration targetDec = symbolTable.lookup(assignmentStatement.getName());
-		check(targetDec != null, assignmentStatement, "variable is undeclared: " + assignmentStatement.getName());
-		Type targetType = targetDec.getType();
-		Type exprType = null;
-		if (assignmentStatement.getSelector() == null) {
-			exprType = (Type) assignmentStatement.getExpr().visit(this, arg);
-		}
-		assignmentStatement.setTargetDec(targetDec);
-		boolean compatible = false;
-		if (targetType != IMAGE) {
-			check(assignmentStatement.getSelector() == null, assignmentStatement, "non image can't have" +
-					"pixel selector");
-			if (targetType == exprType)
-				compatible = true;
-			else if ((targetType == INT && exprType == FLOAT) || (targetType == FLOAT && exprType == INT) ||
-					(targetType == INT && exprType == COLOR) || (targetType == COLOR && exprType == INT)) {
-				assignmentStatement.getExpr().setCoerceTo(targetType);
-				compatible = true;
+		NameDef nameDef = (NameDef) symbolTable.lookup(assignmentStatement.getName());
+		check(nameDef != null, assignmentStatement, "Variable undeclared!");
+
+		assignmentStatement.setTargetDec(nameDef);
+		Declaration dec = assignmentStatement.getTargetDec();
+		Type targetType = dec.getType();
+
+		dec.setInitialized(true);
+
+		Type type = null;
+
+		if (assignmentStatement.getSelector() != null && targetType == Type.IMAGE) {
+			PixelSelector selector = assignmentStatement.getSelector();
+			Expr x = selector.getX();
+			Expr y = selector.getY();
+
+			check(x.getClass() == IdentExpr.class && y.getClass() == IdentExpr.class, assignmentStatement, "x and y must be IdentExpr's!");
+			check(!symbolTable.cont(x.getText()) && !symbolTable.cont(y.getText()), assignmentStatement, "x and y have already been declared!");
+
+			NameDef xNameDef = new NameDef(x.getFirstToken(), "int", x.getText());
+			NameDef yNameDef = new NameDef(y.getFirstToken(), "int", y.getText());
+			xNameDef.setInitialized(true);
+			yNameDef.setInitialized(true);
+
+			x.setType(Type.INT);
+			y.setType(Type.INT);
+			((IdentExpr) x).setDec(xNameDef);
+			((IdentExpr) y).setDec(yNameDef);
+
+			symbolTable.insert(x.getText(), xNameDef);
+			symbolTable.insert(y.getText(), yNameDef);
+
+			Type rhs = (Type) assignmentStatement.getExpr().visit(this, arg);
+			if (rhs == Type.COLOR || rhs == Type.COLORFLOAT || rhs == Type.FLOAT || rhs == Type.INT) {
+				assignmentStatement.getExpr().setCoerceTo(Type.COLOR);
 			}
-		} else {
-			if (assignmentStatement.getSelector() == null) {
-				if (exprType == COLOR || exprType == COLORFLOAT || exprType == INT || exprType == FLOAT ||
-						exprType == IMAGE) {
-					compatible = true;
-					if (exprType == INT)
-						assignmentStatement.getExpr().setCoerceTo(COLOR);
-					else if (exprType == FLOAT)
-						assignmentStatement.getExpr().setCoerceTo(COLORFLOAT);
-				}
-			} else {
-				String nameX = assignmentStatement.getSelector().getX().getText();
-				String nameY = assignmentStatement.getSelector().getY().getText();
-				check(symbolTable.lookup(nameX) == null && symbolTable.lookup(nameY) == null,
-						assignmentStatement,
-						"variables in pixel selector cannot be global variables");
-				assignmentStatement.getSelector().getX().setType(INT);
-				assignmentStatement.getSelector().getY().setType(INT);
-				check(assignmentStatement.getSelector().getX() instanceof IdentExpr &&
-						assignmentStatement.getSelector().getY() instanceof IdentExpr, assignmentStatement,
-						"Pixel selector on left side of assignment has non ident");
-				symbolTable.insert(nameX, new VarDeclaration(assignmentStatement.getFirstToken(),
-						new NameDef(assignmentStatement.getFirstToken(), "int", nameX), null, null));
-				symbolTable.lookup(nameX).setInitialized(true);
-				symbolTable.insert(nameY, new VarDeclaration(assignmentStatement.getFirstToken(),
-						new NameDef(assignmentStatement.getFirstToken(), "int", nameY), null, null));
-				symbolTable.lookup(nameY).setInitialized(true);
-				exprType = (Type) assignmentStatement.getExpr().visit(this, arg);
-				if (exprType == INT || exprType == COLOR || exprType == COLORFLOAT || exprType == FLOAT) {
-					compatible = true;
-					if (exprType == INT || exprType == COLORFLOAT || exprType == FLOAT) {
-						assignmentStatement.getExpr().setCoerceTo(COLOR);
-					}
-				}
-				symbolTable.delete(nameX);
-				symbolTable.delete(nameY);
+			else {
+				check(false, assignmentStatement, "RHS must be COLOR, COLORFLOAT, FLOAT, or INT!");
 			}
 
+			symbolTable.delete(x.getText());
+			symbolTable.delete(y.getText());
 		}
-		check(compatible, assignmentStatement, "incompatible types in assignment of variable: "
-				+ assignmentStatement.getName());
-		targetDec.setInitialized(true);
-		return null;
+
+		if (targetType != Type.IMAGE) {
+
+			Expr expr = assignmentStatement.getExpr();
+			Type exprType = (Type) assignmentStatement.getExpr().visit(this, arg);
+
+			boolean assignmentCompatible = targetType == exprType;
+
+			if (targetType == Type.INT && exprType == Type.FLOAT) {
+				expr.setCoerceTo(Type.INT);
+				assignmentCompatible = true;
+			} else if (targetType == Type.FLOAT && exprType == Type.INT) {
+				expr.setCoerceTo(Type.FLOAT);
+				assignmentCompatible = true;
+			} else if (targetType == Type.INT && exprType == Type.COLOR) {
+				expr.setCoerceTo(Type.INT);
+				assignmentCompatible = true;
+			} else if (targetType == Type.COLOR && exprType == Type.INT) {
+				expr.setCoerceTo(Type.COLOR);
+				assignmentCompatible = true;
+			} else if (assignmentStatement.getSelector() != null) {
+				assignmentCompatible = false;
+			}
+			check(assignmentCompatible, assignmentStatement, "Types are not assignment compatible");
+		}
+		else if (assignmentStatement.getSelector() == null) {
+			Expr expr = assignmentStatement.getExpr();
+			Type exprType = (Type) assignmentStatement.getExpr().visit(this, arg);
+
+			boolean assignmentCompatible = exprType == targetType;
+
+			if (exprType == Type.INT) {
+				expr.setCoerceTo(Type.COLOR);
+				assignmentCompatible = true;
+			} else if (exprType == Type.FLOAT) {
+				expr.setCoerceTo(Type.COLORFLOAT);
+				assignmentCompatible = true;
+			} else if (exprType == Type.COLOR) {
+				assignmentCompatible = true;
+			} else if (exprType == Type.COLORFLOAT) {
+				assignmentCompatible = true;
+			}
+			check(assignmentCompatible, assignmentStatement, "Types are not assignment compatible");
+		}
+		else if (assignmentStatement.getSelector() != null) {
+			PixelSelector selector = assignmentStatement.getSelector();
+			Expr x = selector.getX();
+			Expr y = selector.getY();
+
+			check(x.getClass() == IdentExpr.class && y.getClass() == IdentExpr.class, assignmentStatement, "x and y must be IdentExpr's!");
+			check(!symbolTable.cont(x.getText()) && !symbolTable.cont(y.getText()), assignmentStatement, "x and y have already been declared!");
+
+			NameDef xNameDef = new NameDef(x.getFirstToken(), "int", x.getText());
+			xNameDef.setInitialized(true);
+			NameDef yNameDef = new NameDef(y.getFirstToken(), "int", y.getText());
+			yNameDef.setInitialized(true);
+			symbolTable.insert(x.getText(), xNameDef);
+			symbolTable.insert(x.getText(), xNameDef);
+			symbolTable.insert(y.getText(), yNameDef);
+
+			Type rhs = (Type) assignmentStatement.getExpr().visit(this, arg);
+			if (rhs == Type.COLOR || rhs == Type.COLORFLOAT || rhs == Type.FLOAT || rhs == Type.INT) {
+				assignmentStatement.getExpr().setCoerceTo(Type.COLOR);
+			}
+			else {
+				check(false, assignmentStatement, "RHS must be COLOR, COLORFLOAT, FLOAT, or INT!");
+			}
+
+			symbolTable.delete(x.getText());
+			symbolTable.delete(y.getText());
+		}
+
+		return type;
 	}
+
 
 	@Override
 	public Object visitWriteStatement(WriteStatement writeStatement, Object arg) throws Exception {
@@ -343,89 +407,132 @@ public class TypeCheckVisitor implements ASTVisitor {
 
 	@Override
 	public Object visitReadStatement(ReadStatement readStatement, Object arg) throws Exception {
-		Declaration targetDec = symbolTable.lookup(readStatement.getName());
-		Type targetType = targetDec.getType();
-		Type rightType = (Type) readStatement.getSource().visit(this, arg);
-		check(targetType != null, readStatement, "variable is not declared");
-		if (readStatement.getSelector() != null)
-			check(targetType == IMAGE || readStatement.getName() == null, readStatement, "variable: " +
-					readStatement.getName() + "is not an image, so it cannot have a pixel selector");
-		check(rightType == CONSOLE || rightType == STRING, readStatement, "Right side must be CONSOLE or STRING");
-		if (rightType == CONSOLE)
+		Declaration target = symbolTable.lookup(readStatement.getName());
+		check(target != null, readStatement, "target variable uninitialized");
+
+		readStatement.setTargetDec(target);
+
+		Type targetType = target.getType();
+		check(targetType != null, readStatement.getTargetDec(), "Target not declared!");
+		check(readStatement.getSelector() == null, readStatement.getSelector(), "Cannot have a pixel selector!");
+
+		Type exprType = (Type) readStatement.getSource().visit(this, arg);
+
+		check(exprType == Type.CONSOLE || exprType == Type.STRING, readStatement.getSource(), "RHS must be of type console or string!");
+
+		if (exprType == CONSOLE) {
 			readStatement.getSource().setCoerceTo(targetType);
-		targetDec.setInitialized(true);
+		} else {
+			readStatement.getSource().setCoerceTo(Type.STRING);
+		}
+
+		target.setInitialized(true);
+
 		return null;
 	}
 
 	@Override
 	public Object visitVarDeclaration(VarDeclaration declaration, Object arg) throws Exception {
-		Type type = (Type) declaration.getNameDef().visit(this, arg);
-		Type exprType = null;
-		if (declaration.getOp() != null) {
+		Type exprType;
+		boolean isInitialized = declaration.getExpr() != null;
+		if (isInitialized) {
+			Kind op = declaration.getOp().getKind();
+			declaration.setInitialized(true);
+			declaration.getNameDef().setInitialized(true);
+
+			Expr expr = declaration.getExpr();
 			exprType = (Type) declaration.getExpr().visit(this, arg);
-		}
-		boolean compatible = false;
-		if (type == IMAGE) {
-			check(exprType == IMAGE || declaration.getNameDef().getDim() != null, declaration, "Image must be" +
-					"assigned either an Image or have a Dimension");
-			compatible = true;
-		} else if (declaration.getOp() == null) {
-			return null;
-		} else if (declaration.getOp().getKind() == Kind.ASSIGN) {
-			if (type == exprType)
-				compatible = true;
-			else if ((type == INT && exprType == FLOAT) || (type == FLOAT && exprType == INT) ||
-					(type == INT && exprType == COLOR) || (type == COLOR && exprType == INT)) {
-				declaration.getExpr().setCoerceTo(type);
-				compatible = true;
+
+			Type nameType = (Type) declaration.getNameDef().visit(this, arg);
+			if (op == IToken.Kind.LARROW) {
+				check(exprType == Type.CONSOLE || exprType == Type.STRING, declaration, "ReadStatement RHS must be CONSOLE or STRING");
+				if (exprType == Type.CONSOLE) {
+					expr.setCoerceTo(nameType);
+				}
 			}
-		} else if (declaration.getOp().getKind() == Kind.LARROW) {
-			check(exprType == CONSOLE || exprType == STRING, declaration, "Right side must be CONSOLE or STRING");
-			if (exprType == CONSOLE)
-				declaration.getExpr().setCoerceTo(type);
+			else {
+				if (nameType == Type.IMAGE) {
+					if (exprType == Type.INT) {
+						expr.setCoerceTo(Type.COLOR);
+					} else if (exprType == Type.FLOAT) {
+						expr.setCoerceTo(Type.COLORFLOAT);
+					}
+				}
+
+				if (nameType == Type.INT && exprType == Type.FLOAT) {
+					expr.setCoerceTo(Type.INT);
+				} else if (nameType == Type.FLOAT && exprType == Type.INT) {
+					expr.setCoerceTo(Type.FLOAT);
+				} else if (nameType == Type.INT && exprType == Type.COLOR) {
+					expr.setCoerceTo(Type.INT);
+				} else if (nameType == Type.COLOR && exprType == Type.INT) {
+					expr.setCoerceTo(Type.COLOR);
+				}
+
+				boolean valid1 = nameType == Type.IMAGE && expr.getCoerceTo() == Type.COLOR ||
+						nameType == Type.IMAGE && exprType == Type.COLOR ||
+						nameType == Type.IMAGE && expr.getCoerceTo() == Type.COLORFLOAT ||
+						nameType == Type.IMAGE && exprType == Type.COLORFLOAT;
+				boolean valid2 = nameType == expr.getCoerceTo() || nameType == exprType;
+
+				check(valid1 || valid2, declaration, "Types of LHS and RHS are not compatible!");
+			}
+		} else {
+			declaration.getNameDef().visit(this, arg);
 		}
-		declaration.getNameDef().setInitialized(true);
-		return null;
+		
+		Type nameDefType = declaration.getNameDef().getType();
+		if (nameDefType == Type.IMAGE) {
+			check((isInitialized && declaration.getExpr().getType() == Type.IMAGE) || declaration.getDim() != null || declaration.getExpr().getType() == Type.STRING, declaration, "If type of variable is Image, it must either have an initializer expression of type IMAGE, or a Dimension!");
+		}
+
+		return nameDefType;
 	}
+
 
 	@Override
 	public Object visitProgram(Program program, Object arg) throws Exception {
-		// Save root of AST so return type can be accessed in return statements
+		
 		root = program;
 
-		List<NameDef> params = program.getParams();
-		for (NameDef node : params) {
-			node.visit(this, arg);
-			node.setInitialized(true);
+		String programName = program.getName();
+		symbolTable.setName(programName);
+
+		List<NameDef> parameters = program.getParams();
+		for (NameDef nameDef : parameters) {
+			nameDef.visit(this, arg);
+			nameDef.setInitialized(true);
 		}
-		// Check declarations and statements
+
 		List<ASTNode> decsAndStatements = program.getDecsAndStatements();
 		for (ASTNode node : decsAndStatements) {
 			node.visit(this, arg);
 		}
+
 		return program;
 	}
 
 	@Override
 	public Object visitNameDef(NameDef nameDef, Object arg) throws Exception {
-		String name = nameDef.getName();
-		boolean added = symbolTable.insert(name, nameDef);
-		check(added, nameDef, "variable: " + name + " already added");
+		boolean unique = symbolTable.insert(nameDef.getName(), nameDef);
+		check(unique, nameDef, "Variable declared twice!");
+
 		return nameDef.getType();
 	}
 
 	@Override
 	public Object visitNameDefWithDim(NameDefWithDim nameDefWithDim, Object arg) throws Exception {
-		String name = nameDefWithDim.getName();
-		boolean added = symbolTable.insert(name, nameDefWithDim);
-		check(added, nameDefWithDim, "variable: " + name + " already added");
-		nameDefWithDim.getDim().visit(this, arg);
+		boolean unique = symbolTable.insert(nameDefWithDim.getName(), nameDefWithDim);
+		check(unique, nameDefWithDim, "Variable declared twice!");
+
+		Dimension dim = nameDefWithDim.getDim();
+		check(dim.getHeight().visit(this, arg) == Type.INT && dim.getWidth().visit(this, arg) == Type.INT, nameDefWithDim, "Height and width must be INT!");
 		return nameDefWithDim.getType();
 	}
-
+ 
 	@Override
 	public Object visitReturnStatement(ReturnStatement returnStatement, Object arg) throws Exception {
-		Type returnType = root.getReturnType(); // This is why we save program in visitProgram.
+		Type returnType = root.getReturnType();  //This is why we save program in visitProgram.
 		Type expressionType = (Type) returnStatement.getExpr().visit(this, arg);
 		check(returnType == expressionType, returnStatement, "return statement with invalid type");
 		return null;

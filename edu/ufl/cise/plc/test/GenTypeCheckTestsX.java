@@ -1,4 +1,4 @@
-package edu.ufl.cise.plc;
+package edu.ufl.cise.plc.test;
 
 import static edu.ufl.cise.plc.IToken.Kind.MINUS;
 import static edu.ufl.cise.plc.IToken.Kind.BANG;
@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import org.junit.jupiter.api.Test;
 
+import edu.ufl.cise.plc.CompilerComponentFactory;
+import edu.ufl.cise.plc.IParser;
+import edu.ufl.cise.plc.TypeCheckVisitor;
 import edu.ufl.cise.plc.IToken.Kind;
 import static edu.ufl.cise.plc.IToken.Kind.*;
 import edu.ufl.cise.plc.ast.ASTNode;
